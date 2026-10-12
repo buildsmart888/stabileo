@@ -75,4 +75,28 @@ close('3D fixed-end My', react3.my, -30);
 close('3D fixed-end Mz', react3.mz, 60);
 close('3D tip Uy', tip3.uy, -0.036, 1e-5);
 close('3D tip Uz', tip3.uz, -0.018, 1e-5);
+// Larger independent solver verification: actual 3D building with 105 members
+// and 9 supports. Read the established engine test fixture as the oracle;
+// no visual optimization is allowed to alter the FEM solver output.
+const buildingInput = await fixture('ex-3d-building-case1-input.json');
+const buildingReference = await fixture('ex-3d-building-case1-results.json');
+const buildingOutput = JSON.parse(glue.solve_3d(JSON.stringify(buildingInput)));
+assert.equal(buildingOutput.reactions.length, buildingReference.reactions.length);
+assert.equal(buildingOutput.displacements.length, buildingReference.displacements.length);
+assert.equal(buildingOutput.elementForces.length, buildingReference.elementForces.length);
+for (const reference of buildingReference.reactions) {
+  const actual = byNode(buildingOutput.reactions, reference.nodeId);
+  for (const key of ['fx','fy','fz','mx','my','mz']) {
+    close('Building node ' + reference.nodeId + ' reaction ' + key,
+      actual[key], reference[key], 1e-3, 1e-3);
+  }
+}
+for (const reference of buildingReference.displacements) {
+  const actual = byNode(buildingOutput.displacements, reference.nodeId);
+  for (const key of ['ux','uy','uz','rx','ry','rz']) {
+    close('Building node ' + reference.nodeId + ' displacement ' + key,
+      actual[key], reference[key], 1e-5, 1e-3);
+  }
+}
+console.log('PASS: 3D building, 105-member Rust/WASM solver parity vs engine reference.');
 console.log('PASS: compiled Rust/WASM solved two 2D beam cases and one 3D frame with benchmark parity.');
