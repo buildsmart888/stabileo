@@ -38,6 +38,7 @@ export class NodesInstanced {
 
   private idToIndex = new Map<number, number>();
   private indexToId: number[] = [];
+  private positionById = new Map<number, [number, number, number]>();
   /** Last-set base color per id (used to restore after hover). */
   private baseColorById = new Map<number, number>();
 
@@ -74,6 +75,11 @@ export class NodesInstanced {
         this.setBaseColor(id, COLORS.node);
       }
     }
+    // Avoid pushing a full instance-matrix buffer back to the GPU if the
+    // coordinates have not changed (common during tab and UI re-sync).
+    const previous = this.positionById.get(id);
+    if (previous && previous[0] === x && previous[1] === y && previous[2] === z) return;
+    this.positionById.set(id, [x, y, z]);
     this._mat4.makeTranslation(x, y, z);
     this.mesh.setMatrixAt(idx, this._mat4);
     this.mesh.instanceMatrix.needsUpdate = true;
@@ -99,6 +105,7 @@ export class NodesInstanced {
     this.indexToId.length = lastIdx;
     this.idToIndex.delete(id);
     this.baseColorById.delete(id);
+    this.positionById.delete(id);
     this.count = lastIdx;
     this.mesh.count = this.count;
     this.mesh.instanceMatrix.needsUpdate = true;
@@ -145,6 +152,7 @@ export class NodesInstanced {
   }
 
   clear(): void {
+    this.positionById.clear();
     this.idToIndex.clear();
     this.indexToId.length = 0;
     this.baseColorById.clear();
