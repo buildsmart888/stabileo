@@ -2613,6 +2613,43 @@
 </div>
 
 <style>
+  .performance-panel {
+    position: absolute;
+    bottom: 12px;
+    right: 10px;
+    z-index: 15;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    max-width: min(390px, 70%);
+    padding: 6px 8px;
+    background: rgba(15, 32, 52, 0.92);
+    border: 1px solid #496477;
+    border-radius: 7px;
+    color: #cfe6f6;
+    font: 11px/1.4 system-ui, sans-serif;
+  }
+  .performance-panel select, .performance-panel button {
+    padding: 3px 6px;
+    background: #25485e;
+    border: 1px solid #567d95;
+    border-radius: 5px;
+    color: #f2fcff;
+    cursor: pointer;
+  }
+  .performance-preview { color: #83ebb4; }
+  .performance-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+    gap: 3px 8px;
+    flex-basis: 100%;
+    border-top: 1px solid #496477;
+    padding-top: 5px;
+  }
+  .performance-stats span { display: flex; justify-content: space-between; gap: 8px; }
+  .performance-stats b { font-variant-numeric: tabular-nums; color: #96d6f6; }
   .viewport3d-wrapper {
     width: 100%;
     height: 100%;
