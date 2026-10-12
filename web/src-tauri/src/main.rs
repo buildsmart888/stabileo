@@ -104,7 +104,7 @@ fn tab_key(id: &str) -> Result<String, String> {
 
 #[tauri::command]
 async fn desktop_pick_project(state: State<'_, DesktopState>) -> Result<Option<OpenedProject>, String> {
-    let chosen = tauri::async_runtime::spawn_blocking(|| {
+    let chosen = tauri::async_runtime::spawn_blocking(|| -> Result<Option<(String, PathBuf)>, String> {
         let path = rfd::FileDialog::new()
             .add_filter("Stabileo project", &["ded", "json"])
             .pick_file();
@@ -207,7 +207,7 @@ async fn desktop_autosave(
 async fn desktop_pick_recovery(app: tauri::AppHandle) -> Result<Option<OpenedProject>, String> {
     let dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("recovery");
     if !dir.exists() { return Ok(None); }
-    tauri::async_runtime::spawn_blocking(move || {
+    tauri::async_runtime::spawn_blocking(move || -> Result<Option<OpenedProject>, String> {
         let path = rfd::FileDialog::new()
             .set_directory(&dir)
             .add_filter("Stabileo recovery", &["ded"])
