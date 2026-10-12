@@ -80,4 +80,20 @@ describe('ElementsBatched', () => {
     expect(eb.has(1)).toBe(false);
     expect(eb.elementIdAt(0)).toBeNull();
   });
+
+  it('skips identical element endpoint uploads after an initial GPU flush', () => {
+    const batch = new ElementsBatched();
+    batch.upsert(101, 0, 0, 0, 3, 0, 0);
+    batch.flush();
+    const bufferBefore = batch.mesh.geometry.getAttribute('instanceStart');
+    batch.upsert(101, 0, 0, 0, 3, 0, 0);
+    batch.setColor(101, batch.getBaseColor(101));
+    batch.flush();
+    expect(batch.mesh.geometry.getAttribute('instanceStart')).toBe(bufferBefore);
+    batch.upsert(101, 0, 0, 0, 4, 0, 0);
+    batch.flush();
+    expect(batch.count).toBe(1);
+    expect(batch.elementIdAt(0)).toBe(101);
+  });
+
 });
