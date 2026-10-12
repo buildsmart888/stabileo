@@ -483,7 +483,14 @@
       const _animDeformed = resultsStore.animateDeformed && _dt === 'deformed' && resultsStore.results3D;
       const _animMode = _dt === 'modeShape' && resultsStore.modalResult3D;
       const _animBuckling = _dt === 'bucklingMode' && resultsStore.bucklingResult3D;
-      if (_animDeformed || _animMode || _animBuckling) {
+      // Keep the current result mesh visible, but defer expensive geometry
+      // reconstruction while the user is orbiting a large structure.
+      const freezeDynamicMeshes = isOrbiting && shouldUseFastOrbitLOD(
+        qualityPreset,
+        { elements: modelStore.elements.size, shells: modelStore.plates.size + modelStore.quads.size, loads: modelStore.loads.length },
+        uiStore.renderMode3D, _dt,
+      );
+      if ((_animDeformed || _animMode || _animBuckling) && !freezeDynamicMeshes) {
         if (_animMode || _animBuckling) {
           // Mode shapes always animate — syncDeformed handles the sin() internally
           syncDeformed();
@@ -496,7 +503,7 @@
             syncDeformed(animScale);
           }
         }
-      } else if (deformedGroup && resultsCtx.lastDeformedAnimScale !== null) {
+      } else if (!_animDeformed && !_animMode && !_animBuckling && deformedGroup && resultsCtx.lastDeformedAnimScale !== null) {
         // Animation was running but conditions no longer met (model cleared, example changed, etc.)
         // Clean up immediately to avoid ghost deformed shape lingering until reactive effect fires
         resultsParent.remove(deformedGroup);
@@ -520,8 +527,39 @@
         resultsCtx.lastDespieceSep = null;
       }
 
+      const renderBegin = performance.now();
       renderer.render(scene, camera);
+      const renderMs = performance.now() - renderBegin;
       drawAxisGizmo();
+
+      if (showPerformanceHud) {
+        measurementFrames++;
+        const now = performance.now();
+        const elapsed = now - measurementStart;
+        if (elapsed >= 650) {
+          performanceStats = {
+            fps: Math.round(measurementFrames * 1000 / elapsed),
+            drawCalls: renderer.info.render.calls,
+            triangles: renderer.info.render.triangles,
+            members: modelStore.elements.size,
+            renderMs: Math.round(renderMs * 10) / 10,
+          };
+          measurementStart = now;
+          measurementFrames = 0;
+        }
+      } else {
+        measurementStart = performance.now();
+        measurementFrames = 0;
+      }
+      if (dampingFrames === 0 && restoreOrbitQualityPending) {
+        // Restore expensive solid/sections only AFTER damping settles.
+        restoreOrbitQualityPending = false;
+        isOrbiting = false;
+        fastPreviewActive = false;
+        setRenderPixelRatio(idlePixelRatio(window.devicePixelRatio, qualityPreset));
+        setLowDetail(false);
+        needsRender = true;
+      }
 
       // Camera events, dynamic results and user interactions share ONE frame queue.
       if (needsContinuous() || needsRender) scheduleFrame();
@@ -529,58 +567,79 @@
     // Kick off the first frame
     scheduleFrame();
 
-    // When OrbitControls interaction ends, allow damping frames to settle
-    // During camera manipulation, drop to pixelRatio=1 so the GPU pushes ~4× fewer
-    // pixels on retina displays. Restore on 'end' so the idle frame is crisp.
-    // Slight aliasing during drag is acceptable — users perceive smoothness more
-    // than pixel fidelity while rotating.
-    const idlePixelRatio = window.devicePixelRatio;
-    // Level-of-detail during orbit. Typical models keep full detail while the
-    // camera moves; heavy models (per the isHeavyModel policy in lod.ts, which
-    // weighs shells and the sections render mode) fall back to hiding the
-    // decorative parents + per-element solids and forcing the single batched
-    // LineSegments2 draw call on as the stand-in.
+    // Adaptive LOD: collapse per-member solids into one batched line mesh
+    // during orbit/pan/zoom. Preserve actual shell contour triangles.
+    let restoreOrbitQualityPending = false;
+    let orbitDragging = false;
+    function setRenderPixelRatio(ratio: number): void {
+      if (Math.abs(renderer.getPixelRatio() - ratio) > 0.02) renderer.setPixelRatio(ratio);
+    }
     function setLowDetail(on: boolean): void {
       const dt = resultsStore.diagramType;
-      // Despiece manages element visibility itself (the original members are hidden
-      // and the separated free-body overlay is drawn instead). The heavy-model LOD
-      // fallback would force the batched wireframe visible during camera motion,
-      // flashing the un-separated model over the free-body view — so skip LOD
-      // entirely while Despiece is active. applyElementVisibility stays the authority.
       if (dt === 'despiece') return;
       const resultsColoringActive = !!resultsStore.results3D
         && (dt === 'axialColor' || dt === 'colorMap' || dt === 'verification');
-      const heavyModel = isHeavyModel(
-        { elements: modelStore.elements.size, shells: modelStore.plates.size + modelStore.quads.size },
-        uiStore.renderMode3D,
-      );
+      const counts = {
+        elements: modelStore.elements.size,
+        shells: modelStore.plates.size + modelStore.quads.size,
+        loads: modelStore.loads.length,
+      };
+      const fast = shouldUseFastOrbitLOD(qualityPreset, counts, uiStore.renderMode3D, dt);
+      fastPreviewActive = on && fast;
       applyLowDetail(on, {
         nodesParent, supportsParent, loadsParent, resultsParent, shellsParent,
-        localAxesParent,
-        elementsParent,
+        localAxesParent, elementsParent,
         elementsBatchedMesh: elementsBatched.mesh,
         renderMode: uiStore.renderMode3D,
-      }, { resultsColoringActive, heavyModel });
+      }, {
+        heavyModel: fast,
+        resultsColoringActive,
+        batchedResultColors: true,
+        shellContourActive: dt === 'colorMap'
+          && (resultsStore.colorMapKind === 'shellVonMises' || resultsStore.colorMapKind === 'shellBending'),
+      });
+    }
+    function beginOrbitLOD() {
+      orbitDragging = true;
+      isOrbiting = true;
+      restoreOrbitQualityPending = false;
+      dampingFrames = 0;
+      setRenderPixelRatio(Math.min(renderer.getPixelRatio(), 1));
+      setLowDetail(true);
+      invalidate();
+    }
+    function endOrbitLOD() {
+      if (!orbitDragging) return;
+      orbitDragging = false;
+      restoreOrbitQualityPending = true;
+      dampingFrames = 18;
+      if (cameraSyncTimer) {
+        clearTimeout(cameraSyncTimer);
+        cameraSyncTimer = null;
+      }
+      syncCameraToStore();
+      invalidate();
     }
     exitOrbitLOD = () => {
+      orbitDragging = false;
+      restoreOrbitQualityPending = false;
+      dampingFrames = 0;
       isOrbiting = false;
-      renderer.setPixelRatio(idlePixelRatio);
+      fastPreviewActive = false;
+      setRenderPixelRatio(idlePixelRatio(window.devicePixelRatio, qualityPreset));
       setLowDetail(false);
       invalidate();
     };
-    controls.addEventListener('start', () => {
-      isOrbiting = true;
-      dampingFrames = 0;
-      renderer.setPixelRatio(1);
-      setLowDetail(true);
-    });
-    controls.addEventListener('end', () => {
-      isOrbiting = false;
-      dampingFrames = 20;
-      renderer.setPixelRatio(idlePixelRatio);
-      setLowDetail(false);
+    applyQualityPreset = () => {
+      if (orbitDragging || restoreOrbitQualityPending) setLowDetail(true);
+      else {
+        setRenderPixelRatio(idlePixelRatio(window.devicePixelRatio, qualityPreset));
+        setLowDetail(false);
+      }
       invalidate();
-    });
+    };
+    controls.addEventListener('start', beginOrbitLOD);
+    controls.addEventListener('end', endOrbitLOD);
 
     // Listen for global zoom-to-fit event (dispatched by F key from Toolbar)
     const handleZoomToFitEvent = () => { zoomToFit(); }; // zoomToFit() calls invalidate() internally
@@ -618,6 +677,12 @@
     return () => {
       initialized = false;
       cancelAnimationFrame(animFrameId);
+      if (cameraSyncTimer) clearTimeout(cameraSyncTimer);
+      if (hoverRafId !== null) cancelAnimationFrame(hoverRafId);
+      controls.removeEventListener('change', onOrbitChange);
+      controls.removeEventListener('start', beginOrbitLOD);
+      controls.removeEventListener('end', endOrbitLOD);
+      applyQualityPreset = () => {};
       ro.disconnect();
       renderer.dispose();
       controls.dispose();
