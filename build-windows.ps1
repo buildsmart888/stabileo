@@ -47,6 +47,73 @@ $root = $PSScriptRoot
 $web = Join-Path $root 'web'
 if (-not (Test-Path (Join-Path $web 'package.json'))) { throw "Run this script from a complete Git checkout." }
 
+# Validate and initialize Microsoft Visual C++ Build Tools before compiling anything.
+# Installing Rust alone does not install link.exe or the Windows SDK.
+function Enable-MsvcBuildEnvironment {
+    $link = Get-Command 'link.exe' -ErrorAction SilentlyContinue
+    if ($link) {
+        Write-Host "MSVC linker available: $($link.Source)" -ForegroundColor Green
+        return
+    }
+
+    $help = @'
+Microsoft Visual C++ linker link.exe is missing.
+Install Visual Studio Build Tools 2022 (Desktop development with C++).
+Select MSVC v143 x64/x86 build tools and a Windows 10/11 SDK.
+
+Run in an elevated PowerShell:
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e --source winget --override "--passive --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+
+If Build Tools is already installed, open "Visual Studio Installer", click
+"Modify" on Build Tools, select "Desktop development with C++", and apply.
+Then reopen PowerShell and rerun build-windows.ps1.
+Documentation: https://v2.tauri.app/start/prerequisites/
+'@
+
+    $programFilesX86 = [Environment]::GetFolderPath('ProgramFilesX86')
+    $vswhere = Join-Path $programFilesX86 'Microsoft Visual Studio\Installer\vswhere.exe'
+    if (-not (Test-Path -LiteralPath $vswhere)) {
+        throw $help
+    }
+
+    # Search installed instances by required MSVC workload component, not a
+    # fixed version-specific installation path; supports nondefault locations.
+    $instances = @(& $vswhere -latest -products '*' -requires 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64' -property installationPath)
+    $instances = @($instances | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($LASTEXITCODE -ne 0 -or $instances.Count -eq 0) {
+        throw $help
+    }
+
+    $vsDevCmd = Join-Path $instances[0] 'Common7\Tools\VsDevCmd.bat'
+    if (-not (Test-Path -LiteralPath $vsDevCmd)) {
+        throw "Visual Studio C++ tools found but VsDevCmd.bat is missing: $vsDevCmd. Repair Build Tools in Visual Studio Installer."
+    }
+
+    # Import MSVC + Windows SDK PATH, LIB and INCLUDE into THIS PowerShell
+    # process so Rust/Cargo and wasm-pack can resolve link.exe and *.lib.
+    $cmdLine = 'call "' + $vsDevCmd + '" -no_logo -arch=amd64 -host_arch=amd64 >nul && set'
+    $envDump = @(& cmd.exe /d /c $cmdLine)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not initialize MSVC developer environment. Check Visual Studio Installer for missing C++ components and Windows SDK."
+    }
+    foreach ($line in $envDump) {
+        $index = $line.IndexOf('=')
+        if ($index -gt 0) {
+            $name = $line.Substring(0, $index)
+            $value = $line.Substring($index + 1)
+            [Environment]::SetEnvironmentVariable($name, $value, 'Process')
+        }
+    }
+
+    $link = Get-Command 'link.exe' -ErrorAction SilentlyContinue
+    if (-not $link -or [string]::IsNullOrWhiteSpace($env:LIB)) {
+        throw "MSVC initialization did not make link.exe and SDK library paths available. Repair C++ Build Tools and Windows SDK, then rerun."
+    }
+    Write-Host "MSVC linker ready: $($link.Source)" -ForegroundColor Green
+    Write-Host "Visual Studio tools: $($instances[0])" -ForegroundColor Green
+}
+Enable-MsvcBuildEnvironment
+
 # Tauri on Windows requires MSVC, not GNU. Nightly is needed by this engine.
 Exec 'rustup' @('default','stable-msvc')
 Exec 'rustup' @('toolchain','install','stable','--profile','minimal')
