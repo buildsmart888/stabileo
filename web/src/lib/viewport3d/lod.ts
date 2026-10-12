@@ -63,7 +63,14 @@ export interface LowDetailGroups {
 export function applyLowDetail(
   on: boolean,
   g: LowDetailGroups,
-  opts?: { resultsColoringActive?: boolean; heavyModel?: boolean },
+  opts?: {
+    resultsColoringActive?: boolean;
+    heavyModel?: boolean;
+    /** Result colors are already mirrored into the one-draw-call batched lines. */
+    batchedResultColors?: boolean;
+    /** A shell stress contour still needs its original mesh while orbiting. */
+    shellContourActive?: boolean;
+  },
 ): void {
   const heavy = opts?.heavyModel === true;
   const keepElementsForResults = opts?.resultsColoringActive === true;
@@ -72,13 +79,20 @@ export function applyLowDetail(
   // per-element meshes and the shell groups — the shell heatmap lives on the
   // shells themselves.
   const hideDecor = on && heavy;
-  const hideElements = on && heavy && !keepElementsForResults;
+  // During color-map inspection the batched line already carries each member's
+  // result color; it can replace thousands of cylinders/sections *while moving*.
+  // Only shell contours are excluded because their scalar field lives on the
+  // original triangles, not the batched member centerlines.
+  const canUseColoredBatch = opts?.batchedResultColors === true;
+  const hideElements = hideDecor && (!keepElementsForResults || canUseColoredBatch);
+  const hideShells = hideDecor && !(keepElementsForResults &&
+    (!canUseColoredBatch || opts?.shellContourActive === true));
 
   if (g.nodesParent) g.nodesParent.visible = !hideDecor;
   if (g.localAxesParent) g.localAxesParent.visible = !hideDecor;
   if (g.supportsParent) g.supportsParent.visible = !hideDecor;
   if (g.loadsParent) g.loadsParent.visible = !hideDecor;
-  if (g.shellsParent) g.shellsParent.visible = !hideElements;
+  if (g.shellsParent) g.shellsParent.visible = !hideShells;
   if (g.elementsParent) g.elementsParent.visible = !hideElements;
 
   if (g.elementsBatchedMesh) {
@@ -93,17 +107,63 @@ export function applyLowDetail(
  *  roughly doubling the per-element cost vs wireframe/solid — so it falls back
  *  much earlier. Shells count toward the budget: a slab/wall model with few
  *  frame elements but thousands of shell faces is just as heavy during orbit. */
-export const HEAVY_MODEL_VISUALS = 3000;
-export const HEAVY_MODEL_VISUALS_SECTIONS = 1200;
+/**
+ * Draw-call-aware thresholds calibrated against actual checked-in models:
+ * - pro-edificio-7p: 203 frames + 77 shells + 196 loads
+ * - rc-design-frame: 408 frames + 656 loads
+ * - la-bombonera: 2476 frames + 120 shells + 514 loads
+ *
+ * The former 3000/1200 thresholds did not trigger on the user's 7-floor
+ * Professional model even though sections create ≈2 draw calls/member.
+ * These are heuristics, NOT measured FPS targets; the viewport HUD reports
+ * actual GPU draw calls and frame times for tuning on the user's machine.
+ */
+export const HEAVY_MODEL_VISUALS = 1200;
+export const HEAVY_MODEL_VISUALS_SOLID = 380;
+export const HEAVY_MODEL_VISUALS_SECTIONS = 180;
+export type ViewQuality3D = 'auto' | 'performance' | 'detail';
 
-/** Single policy point for the orbit LOD decision (kept here, next to the
- *  visibility rules it gates, so callers can't drift on the criteria). */
+export interface ModelVisualCounts {
+  elements: number;
+  shells?: number;
+  loads?: number;
+}
+
+export function weightedVisualCount(counts: ModelVisualCounts): number {
+  return Math.max(0, counts.elements)
+    + Math.max(0, counts.shells ?? 0) * 2
+    + Math.max(0, counts.loads ?? 0) * 0.5;
+}
+
 export function isHeavyModel(
-  counts: { elements: number; shells?: number },
+  counts: ModelVisualCounts,
   renderMode: RenderMode3D,
 ): boolean {
-  const visuals = counts.elements + (counts.shells ?? 0);
-  return visuals > (renderMode === 'sections' ? HEAVY_MODEL_VISUALS_SECTIONS : HEAVY_MODEL_VISUALS);
+  const threshold = renderMode === 'sections'
+    ? HEAVY_MODEL_VISUALS_SECTIONS
+    : renderMode === 'solid'
+      ? HEAVY_MODEL_VISUALS_SOLID
+      : HEAVY_MODEL_VISUALS;
+  return weightedVisualCount(counts) > threshold;
+}
+
+/** Detail preference changes visual quality only, never FEM geometry/values. */
+export function shouldUseFastOrbitLOD(
+  quality: ViewQuality3D,
+  counts: ModelVisualCounts,
+  mode: RenderMode3D,
+  diagramType = 'none',
+): boolean {
+  if (diagramType === 'despiece') return false;
+  if (quality === 'detail') return false;
+  return quality === 'performance' || isHeavyModel(counts, mode);
+}
+
+/** Clamp Retina/4K render resolution to avoid quadratic WebGL fill pressure. */
+export function idlePixelRatio(deviceRatio: number, quality: ViewQuality3D): number {
+  const safeRatio = Number.isFinite(deviceRatio) && deviceRatio > 0 ? deviceRatio : 1;
+  const limit = quality === 'performance' ? 1.25 : quality === 'detail' ? 2 : 1.5;
+  return Math.min(safeRatio, limit);
 }
 
 /** Convenience re-export type for callers that want to pass a real scene. */
