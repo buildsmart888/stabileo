@@ -16,8 +16,8 @@ If Build Tools is already installed without the C++ workload, use
 **Visual Studio Installer > Modify** and add **Desktop development with C++**.
 Reopen PowerShell after installation.
 
-The \`build-windows.ps1\` script now verifies the MSVC component with Microsoft's
-\`vswhere.exe\`, imports \`VsDevCmd.bat\` to set \`PATH\`, \`LIB\`, \`INCLUDE\`
+The `build-windows.ps1` script now verifies the MSVC component with Microsoft's
+`vswhere.exe`, imports `VsDevCmd.bat` to set `PATH`, `LIB`, `INCLUDE`
 for MSVC/Windows SDK, and fails early with a clear remedy if the linker is absent.
 
 Desktop source lives in `web/src-tauri/`. This remains an **unsigned test build**.
