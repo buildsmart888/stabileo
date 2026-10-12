@@ -141,6 +141,7 @@ try {
             Exec 'npm.cmd' @('run','wasm')
         }
         Exec 'npm.cmd' @('run','desktop:smoke')
+        Exec 'npm.cmd' @('run','desktop:perf-unit')
         Exec 'npm.cmd' @('run','desktop:verify-solver')
         Exec 'npm.cmd' @('run','desktop:frontend')
         Exec 'cargo' @('+stable','test','--manifest-path','src-tauri/Cargo.toml')
