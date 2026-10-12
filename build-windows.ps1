@@ -17,7 +17,7 @@ function Exec([string]$Command, [string[]]$Arguments) {
 }
 # Install checks are Windows-specific. Rustup typically lives in %USERPROFILE%\.cargo\bin,
 # which is not visible to an already-open terminal after the Rust installer finishes.
-foreach ($cmd in @('node','npm')) {
+foreach ($cmd in @('node','npm.cmd')) {
     if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
         throw "Missing $cmd. Install Node.js 22 LTS from https://nodejs.org/ and reopen PowerShell."
     }
@@ -131,13 +131,15 @@ try {
     }
     Push-Location $web
     try {
-        Exec 'npm' @('install','--no-package-lock')
-        Exec 'npm' @('run','wasm')
-        Exec 'npm' @('run','desktop:smoke')
-        Exec 'npm' @('run','desktop:verify-solver')
-        Exec 'npm' @('run','desktop:frontend')
+        # Execute npm.cmd, NOT npm.ps1: the latter accesses $MyInvocation.Statement
+        # and fails under Set-StrictMode -Version Latest on Windows PowerShell 5.1.
+        Exec 'npm.cmd' @('install','--no-package-lock')
+        Exec 'npm.cmd' @('run','wasm')
+        Exec 'npm.cmd' @('run','desktop:smoke')
+        Exec 'npm.cmd' @('run','desktop:verify-solver')
+        Exec 'npm.cmd' @('run','desktop:frontend')
         Exec 'cargo' @('+stable','test','--manifest-path','src-tauri/Cargo.toml')
-        Exec 'npm' @('run','desktop:build')
+        Exec 'npm.cmd' @('run','desktop:build')
     } finally { Pop-Location }
 
     $nsisDir = Join-Path $root 'web\src-tauri\target\release\bundle\nsis'
