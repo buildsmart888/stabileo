@@ -143,8 +143,12 @@ try {
     } finally { Pop-Location }
 
     $nsisDir = Join-Path $root 'web\src-tauri\target\release\bundle\nsis'
-    $installers = @(Get-ChildItem -LiteralPath $nsisDir -Filter '*.exe' -File -ErrorAction SilentlyContinue)
-    if ($installers.Count -eq 0) { throw "Tauri did not produce an NSIS .exe in $nsisDir" }
+    # Do not mistake a leftover v0.1.0 installer for the freshly built v0.1.1 package.
+    $tauriConfig = Get-Content -LiteralPath (Join-Path $web 'src-tauri\tauri.conf.json') -Raw | ConvertFrom-Json
+    $expectedVersion = [string]$tauriConfig.version
+    $expectedFilter = "*_${expectedVersion}_*-setup.exe"
+    $installers = @(Get-ChildItem -LiteralPath $nsisDir -Filter $expectedFilter -File -ErrorAction SilentlyContinue)
+    if ($installers.Count -eq 0) { throw "Tauri did not produce a NEW v$expectedVersion NSIS .exe in $nsisDir (expected $expectedFilter)" }
     foreach ($installer in $installers) {
         $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $installer.FullName
         Write-Host "INSTALLER: $($installer.FullName)" -ForegroundColor Green
