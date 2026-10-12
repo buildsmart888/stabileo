@@ -1,5 +1,25 @@
 # GO Structural Analysis Desktop (Stabileo AGPL-3.0)
 
+## Fix for "link.exe not found" on Windows
+
+Rustup and VS Code **do not** supply the Microsoft MSVC linker. Install
+**Visual Studio Build Tools 2022** with the **Desktop development with C++**
+workload, including **MSVC v143 x64/x86** and a **Windows 10/11 SDK**.
+
+In PowerShell (installation can ask for administrator confirmation):
+
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e --source winget --override "--passive --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+If Build Tools is already installed without the C++ workload, use
+**Visual Studio Installer > Modify** and add **Desktop development with C++**.
+Reopen PowerShell after installation.
+
+The \`build-windows.ps1\` script now verifies the MSVC component with Microsoft's
+\`vswhere.exe\`, imports \`VsDevCmd.bat\` to set \`PATH\`, \`LIB\`, \`INCLUDE\`
+for MSVC/Windows SDK, and fails early with a clear remedy if the linker is absent.
+
 Desktop source lives in `web/src-tauri/`. This remains an **unsigned test build**.
 
 ## Build directly on Windows
