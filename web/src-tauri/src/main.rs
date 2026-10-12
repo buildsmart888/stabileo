@@ -300,7 +300,7 @@ async fn desktop_list_recovery(app: tauri::AppHandle) -> Result<Vec<RecoveryEntr
 async fn desktop_read_recovery(app: tauri::AppHandle, id: String) -> Result<OpenedProject, String> {
     let id = tab_key(&id)?;
     let path = recovery_dir(&app)?.join(format!("{id}.ded"));
-    tauri::async_runtime::spawn_blocking(move || {
+    tauri::async_runtime::spawn_blocking(move || -> Result<OpenedProject, String> {
         Ok(OpenedProject {
             filename: path.file_name().unwrap_or_default().to_string_lossy().into_owned(),
             content: read_project(&path)?,
