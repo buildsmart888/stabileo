@@ -1,6 +1,6 @@
 [package]
 name = "go-structural-analysis"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 description = "AGPL-3.0 structural analysis desktop shell for Stabileo"
 license = "AGPL-3.0-only"

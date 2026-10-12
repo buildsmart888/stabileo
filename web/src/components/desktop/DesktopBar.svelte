@@ -70,7 +70,7 @@
 </script>
 {#if enabled}
   <nav class="go-desktop" aria-label="Desktop file commands">
-    <strong>GO Structural Analysis <span class="go-version">v0.1.2 QA</span></strong>
+    <strong>GO Structural Analysis <span class="go-version">v0.2.0 QA</span></strong>
     <span class="source">Stabileo / AGPL-3.0</span>
     <button onclick={() => void desktopOpen()}>Open Ctrl+O</button>
     <button onclick={() => void desktopSave(false)}>Save Ctrl+S</button>

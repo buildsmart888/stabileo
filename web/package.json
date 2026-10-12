@@ -1,6 +1,6 @@
 {
   "name": "stabileo-web",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,8 +13,9 @@
     "desktop:frontend": "npm run desktop:verify-solver && node scripts/build-desktop.mjs",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
-    "desktop:smoke": "node --test scripts/desktop-smoke.test.mjs",
-    "desktop:verify-solver": "node scripts/check-wasm.mjs && node scripts/verify-wasm-solvers.mjs"
+    "desktop:smoke": "node --test scripts/desktop-smoke.test.mjs && node scripts/desktop-performance-fixtures.mjs",
+    "desktop:verify-solver": "node scripts/check-wasm.mjs && node scripts/verify-wasm-solvers.mjs",
+    "desktop:performance-fixtures": "node scripts/desktop-performance-fixtures.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
