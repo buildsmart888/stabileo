@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import * as XLSX from 'xlsx';
+import XLSX from 'xlsx';
 const base = new URL('../../engine/tests/fixtures/', import.meta.url);
 test('2D cantilever reference equilibrium and tip displacement', async () => {
  const input = JSON.parse(await readFile(new URL('ex-cantilever-input.json',base)));
