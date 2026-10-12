@@ -1,4 +1,4 @@
-GO Structural Analysis - Stabileo Desktop prototype v0.1.0
+GO Structural Analysis - Stabileo Desktop prototype v0.1.2
 
 This program is based on Stabileo, copyright its original contributors,
 https://github.com/lambdaclass/stabileo
