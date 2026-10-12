@@ -48,3 +48,33 @@ export async function desktopAutoSave(): Promise<void> {
   catch (error) { console.error('Desktop recovery snapshot failed:', error); }
   finally { inFlight = false; }
 }
+
+
+export interface RecoveryEntry {
+  id: string;
+  modelName: string;
+  modifiedAtMs: number;
+  bytes: number;
+}
+
+/** Read-only metadata; do not restore/overwrite a tab without user consent. */
+export async function desktopListRecovery(): Promise<RecoveryEntry[]> {
+  const invoke = native();
+  if (!invoke) return [];
+  return invoke<RecoveryEntry[]>('desktop_list_recovery');
+}
+
+/** Restores a snapshot explicitly chosen in the Recovery dialog, with normal .ded validation. */
+export async function desktopRecoverById(id: string): Promise<boolean> {
+  const invoke = native();
+  if (!invoke) return false;
+  try {
+    const opened = await invoke<Opened>('desktop_read_recovery', { id });
+    await restoreContent(opened, false);
+    uiStore.toast('Recovery snapshot restored. Save As to keep this version.', 'info');
+    return true;
+  } catch (error) {
+    uiStore.toast('Recovery failed: ' + String(error), 'error');
+    return false;
+  }
+}
