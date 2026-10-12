@@ -5,7 +5,8 @@ Creates a local unsigned NSIS setup EXE and a SHA256 summary; no administrator r
 required to execute this script. Does not change GitHub Actions or its billing settings.
 #>
 param(
-    [switch]$SkipEngineTests
+    [switch]$SkipEngineTests,
+    [switch]$SkipWasmBuild
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -134,7 +135,11 @@ try {
         # Execute npm.cmd, NOT npm.ps1: the latter accesses $MyInvocation.Statement
         # and fails under Set-StrictMode -Version Latest on Windows PowerShell 5.1.
         Exec 'npm.cmd' @('install','--no-package-lock')
-        Exec 'npm.cmd' @('run','wasm')
+        if ($SkipWasmBuild) {
+            Write-Host 'Skipping WASM rebuild; verifying existing real solver binary before packaging.' -ForegroundColor Yellow
+        } else {
+            Exec 'npm.cmd' @('run','wasm')
+        }
         Exec 'npm.cmd' @('run','desktop:smoke')
         Exec 'npm.cmd' @('run','desktop:verify-solver')
         Exec 'npm.cmd' @('run','desktop:frontend')

@@ -46,7 +46,7 @@
 </script>
 {#if enabled}
   <nav class="go-desktop" aria-label="Desktop file commands">
-    <strong>GO Structural Analysis</strong>
+    <strong>GO Structural Analysis <span class="go-version">v0.1.1 QA</span></strong>
     <span class="source">Stabileo / AGPL-3.0</span>
     <button onclick={() => void desktopOpen()}>Open Ctrl+O</button>
     <button onclick={() => void desktopSave(false)}>Save Ctrl+S</button>
@@ -94,7 +94,7 @@
 {/if}
 <style>
 .go-desktop{display:flex;align-items:center;gap:9px;flex-wrap:wrap;position:relative;z-index:9999;background:#112438;color:#e7f3fc;padding:8px 14px;font:12px/1.4 system-ui;border-bottom:1px solid #47748e}
-.go-desktop strong{font-size:14px;letter-spacing:.2px}.source{opacity:.7;margin-right:auto}
+.go-desktop strong{font-size:14px;letter-spacing:.2px}.go-version{color:#7ad9b6;font-size:10px;font-weight:500}.source{opacity:.7;margin-right:auto}
 .go-desktop button{background:#214965;border:1px solid #5082a2;border-radius:6px;padding:7px 11px;color:#fff;cursor:pointer}
 .go-desktop button:hover{background:#317499}.offline{color:#8be5bb}
   .recovery-overlay{position:fixed;inset:0;z-index:30001;background:#000b;display:flex;align-items:center;justify-content:center;padding:20px}
