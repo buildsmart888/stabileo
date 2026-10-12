@@ -8,6 +8,8 @@ use tauri::{Manager, State};
 use base64::Engine as _;
 
 const MAX_FILE_BYTES: usize = 64 * 1024 * 1024;
+// Four older revisions plus the latest valid .ded snapshot per tab.
+const RECOVERY_HISTORY_TO_KEEP: usize = 4;
 
 #[derive(Default)]
 struct FileState {
@@ -189,18 +191,93 @@ async fn desktop_save_project(
     Ok(Some(path.to_string_lossy().into_owned()))
 }
 
+/// Compare model contents, not serialization timestamps. Repeated 30-second timer
+/// ticks must not flood the recovery directory with equivalent snapshots.
+fn same_recovery_model(a: &str, b: &str) -> bool {
+    fn without_timestamp(source: &str) -> Option<serde_json::Value> {
+        let mut value: serde_json::Value = serde_json::from_str(source).ok()?;
+        value.as_object_mut()?.remove("timestamp");
+        Some(value)
+    }
+    match (without_timestamp(a), without_timestamp(b)) {
+        (Some(left), Some(right)) => left == right,
+        _ => false,
+    }
+}
+
+/// Archive only valid former snapshots; never rotate out the current last good
+/// file before the replacement is successfully written.
+fn list_tab_history(dir: &Path, tab_id: &str) -> Result<Vec<PathBuf>, String> {
+    let prefix = format!("{tab_id}--rev-");
+    let mut files = Vec::new();
+    if !dir.exists() {
+        return Ok(files);
+    }
+    for entry in fs::read_dir(dir).map_err(|e| e.to_string())? {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        if !path.is_file() || path.extension().and_then(|x| x.to_str()) != Some("ded") {
+            continue;
+        }
+        let Some(stem) = path.file_stem().and_then(|x| x.to_str()) else {
+            continue;
+        };
+        if let Some(suffix) = stem.strip_prefix(&prefix) {
+            if !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_digit()) {
+                files.push(path);
+            }
+        }
+    }
+    // Nanosecond UNIX timestamps are monotonic in representation and sort lexically.
+    files.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
+    Ok(files)
+}
+
+fn save_recovery_snapshot(dir: &Path, tab_id: &str, content: &str) -> Result<bool, String> {
+    let tab_id = tab_key(tab_id)?;
+    validate_project(content)?;
+    fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let latest = dir.join(format!("{tab_id}.ded"));
+
+    if latest.exists() {
+        // A corrupted/partial old file is never considered a valid archived version.
+        if let Ok(previous) = read_project(&latest) {
+            if same_recovery_model(&previous, content) {
+                return Ok(false);
+            }
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| e.to_string())?
+                .as_nanos()
+                .to_string();
+            let history_id = format!("{tab_id}--rev-{stamp}");
+            if history_id.len() <= 100 {
+                let archive = dir.join(format!("{history_id}.ded"));
+                fs::copy(&latest, archive)
+                    .map_err(|e| format!("Unable to preserve previous recovery snapshot: {e}"))?;
+            }
+        }
+    }
+
+    backup_and_write(&latest, content)?;
+    let history = list_tab_history(dir, &tab_id)?;
+    for obsolete in history.into_iter().skip(RECOVERY_HISTORY_TO_KEEP) {
+        // An inability to remove an old version is not a failed autosave.
+        if let Err(error) = fs::remove_file(&obsolete) {
+            eprintln!("Cannot prune old recovery snapshot {}: {error}", obsolete.display());
+        }
+    }
+    Ok(true)
+}
+
 #[tauri::command]
 async fn desktop_autosave(
     app: tauri::AppHandle,
     tab_id: String,
     content: String,
-) -> Result<(), String> {
-    validate_project(&content)?;
+) -> Result<bool, String> {
     let key = tab_key(&tab_id)?;
-    let path = app.path().app_local_data_dir().map_err(|e| e.to_string())?
-        .join("recovery")
-        .join(format!("{key}.ded"));
-    tauri::async_runtime::spawn_blocking(move || backup_and_write(&path, &content))
+    let dir = recovery_dir(&app)?;
+    tauri::async_runtime::spawn_blocking(move || save_recovery_snapshot(&dir, &key, &content))
         .await.map_err(|e| e.to_string())?
 }
 
@@ -442,6 +519,68 @@ mod tests {
         assert!(files[0].modified_at_ms > 0);
 
         fs::remove_dir_all(&folder).unwrap();
+    }
+
+    #[test]
+    fn recovery_keeps_bounded_history_and_skips_duplicate_model_states() {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("go-stabileo-history-{stamp}"));
+        let tab = "tab-321";
+        let make_model = |revision: i32, iso: &str| {
+            format!(
+                r#"{{"version":"2.0","name":"Frame","timestamp":"{}","snapshot":{{"nodes":[{}]}}}}"#,
+                iso, revision
+            )
+        };
+        assert_eq!(save_recovery_snapshot(&dir, tab, &make_model(1, "t1")), Ok(true));
+        assert_eq!(save_recovery_snapshot(&dir, tab, &make_model(1, "t2")), Ok(false));
+        assert_eq!(scan_recovery(&dir).unwrap().len(), 1);
+
+        for revision in 2..=9 {
+            assert_eq!(
+                save_recovery_snapshot(&dir, tab, &make_model(revision, "t3")),
+                Ok(true)
+            );
+        }
+
+        let all = scan_recovery(&dir).unwrap();
+        assert_eq!(all.len(), 1 + RECOVERY_HISTORY_TO_KEEP);
+        assert_eq!(list_tab_history(&dir, tab).unwrap().len(), RECOVERY_HISTORY_TO_KEEP);
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(
+                &read_project(&dir.join("tab-321.ded")).unwrap()
+            )
+            .unwrap()["snapshot"]["nodes"][0],
+            9
+        );
+        // Preserve the two immediately previous distinct revisions.
+        let history = list_tab_history(&dir, tab).unwrap();
+        let mut revisions: Vec<i32> = history
+            .iter()
+            .map(|path| {
+                let raw = read_project(path).unwrap();
+                serde_json::from_str::<serde_json::Value>(&raw).unwrap()["snapshot"]["nodes"][0]
+                    .as_i64()
+                    .unwrap() as i32
+            })
+            .collect();
+        revisions.sort_unstable();
+        assert_eq!(revisions, vec![5, 6, 7, 8]);
+
+        assert!(save_recovery_snapshot(&dir, "../bad", &make_model(10, "t4")).is_err());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn comparison_excludes_timestamp_but_includes_structural_changes() {
+        let first = r#"{"version":"2.0","timestamp":"first","snapshot":{"nodes":[1]}}"#;
+        let same = r#"{"version":"2.0","timestamp":"later","snapshot":{"nodes":[1]}}"#;
+        let changed = r#"{"version":"2.0","timestamp":"later","snapshot":{"nodes":[2]}}"#;
+        assert!(same_recovery_model(first, same));
+        assert!(!same_recovery_model(first, changed));
     }
 
     #[test]
