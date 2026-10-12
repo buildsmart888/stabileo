@@ -10,10 +10,11 @@
     "wasm": "cd ../engine && wasm-pack build --target web --out-dir ../web/src/lib/wasm --no-opt",
     "test": "vitest run",
     "test:watch": "vitest",
-    "desktop:frontend": "node scripts/check-wasm.mjs && node scripts/build-desktop.mjs",
+    "desktop:frontend": "npm run desktop:verify-solver && node scripts/build-desktop.mjs",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
-    "desktop:smoke": "node scripts/check-wasm.mjs && node --test scripts/desktop-smoke.test.mjs"
+    "desktop:smoke": "node --test scripts/desktop-smoke.test.mjs",
+    "desktop:verify-solver": "node scripts/check-wasm.mjs && node scripts/verify-wasm-solvers.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.3",

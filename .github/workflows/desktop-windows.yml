@@ -9,6 +9,7 @@ on:
       - 'web/src/components/desktop/**'
       - 'web/scripts/**'
       - 'web/package.json'
+      - 'build-windows.ps1'
       - 'web/src/App.svelte'
       - '.github/workflows/desktop-windows.yml'
   pull_request:
@@ -27,24 +28,29 @@ jobs:
   desktop-windows:
     name: Native Rust + WASM + NSIS
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
         with:
+          components: rust-src
           targets: wasm32-unknown-unknown
+      - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@wasm-pack
       - name: Install frontend and Tauri CLI
         working-directory: web
         run: npm install --no-package-lock
       - name: Engine regression unit tests
         run: cargo +stable test --manifest-path engine/Cargo.toml --lib
-      - name: Build real Rust WASM engine
+      - name: Build real Rust WASM engine (nightly build-std)
         working-directory: web
         run: npm run wasm
+      - name: Execute Rust WASM 2D and 3D solver cases
+        working-directory: web
+        run: npm run desktop:verify-solver
       - name: Desktop smoke/reference fixture checks
         working-directory: web
         run: npm run desktop:smoke

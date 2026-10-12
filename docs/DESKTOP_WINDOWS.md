@@ -1,32 +1,45 @@
 # GO Structural Analysis Desktop (Stabileo AGPL-3.0)
-This is an open-source prototype, not a certified production structural design package.
 
-## Windows build
-Install Node.js 20+, Git, Rust stable, Microsoft C++ Build Tools, WebView2, wasm-pack.
+Desktop source lives in `web/src-tauri/`. This remains an **unsigned test build**.
 
-PowerShell:
-    rustup toolchain install stable
-    rustup target add wasm32-unknown-unknown --toolchain stable
-    cargo install wasm-pack --locked
-    cd web
-    npm install
-    npm run wasm
-    npm run desktop:smoke
-    npm run desktop:build
+## Build directly on Windows
 
-## Commands and recovery
-Open: Ctrl+O, Save: Ctrl+S, Save As: Ctrl+Shift+S; use desktop toolbar.
-Original .ded validated loader is used. Saving keeps .ded.bak on overwrites.
-Periodic recovery snapshots are in Tauri per-app local data directory.
-The user must opt-in to restore a recovery snapshot.
+Install Node.js 22+, Rustup, Git, Microsoft C++ Build Tools (MSVC + Windows SDK), and WebView2 Runtime.
+Check out the Desktop feature branch in Windows PowerShell:
 
-## Validation
-Real WASM build is mandatory and no stub is permitted in desktop production.
-Rust engine tests, reference fixture checks, and Tauri installer builds are separate gates.
-Offline behavior and actual WebView2 calculations still require human Windows acceptance.
-AI services that require external providers do not work offline.
+```powershell
+git clone https://github.com/buildsmart888/stabileo.git
+cd stabileo
+git switch feat/go-desktop-tauri-mvp-20261012
+powershell -ExecutionPolicy Bypass -File .\build-windows.ps1
+```
 
-## License
-The combined desktop prototype remains AGPL-3.0. Retain the root LICENSE,
-the desktop NOTICE-AGPL.txt, source availability, and third-party notices.
-Do not attach closed-source modules without separate legal review.
+The script installs stable/nightly Rust toolchains and wasm-pack if needed, compiles the real
+Rust/WASM solver, exercises actual 2D and 3D solver runs, tests the Tauri Rust shell, builds
+the frontend and NSIS installer, and prints installer path plus SHA-256 checksum.
+Requires internet to download dependencies. Signing is not configured.
+
+## GitHub Actions runner provisioning blocker
+
+12 October 2026 runs 38202454766 / 38202464883 and the CI Linux jobs **failed before
+"Set up job"** with `runner_id=0` and empty `steps=[]`. A failed-job rerun of
+38202464883 behaved identically. No Windows compilation commands were executed.
+
+Check the repository Settings > Actions > General (runner/action allowances) and
+user Settings > Billing and licensing > Actions usage and payment status.
+This is a public repository, whose standard hosted runner minutes are normally free.
+If GitHub still rejects all jobs before runner assignment, contact GitHub Support
+and include the run IDs and no-steps evidence. The code cannot fix hosted-runner provisioning.
+
+## Notes
+- Project Open/Save/Save As commands use Tauri-hosted native dialogs.
+- Periodic recovery snapshots live in the Tauri per-app local data directory.
+- Existing project deserializer validates loaded `.ded` models; saved files get a `.ded.bak`.
+- Ctrl+O / Ctrl+S / Ctrl+Shift+S are available in the desktop UI.
+- Offline calculations use local WASM. AI provider features require internet and external services.
+- Existing engine smoke tests compare reference fixtures; `desktop:verify-solver` separately
+  **runs actual** Rust WASM linear-static 2D and 3D example solves.
+- WASM gate is mandatory before NSIS is allowed to build. No stub binaries accepted.
+- Windows UI, installer execution, model import/export, print and complete offline tests
+  still require Windows acceptance. A green CI doesn't certify structural results.
+- Keep AGPL-3.0 `LICENSE` and `NOTICE-AGPL.txt` when distributing.
