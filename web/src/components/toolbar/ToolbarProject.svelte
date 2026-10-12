@@ -4,6 +4,7 @@
   import { generateShareURL, loadFromShareLink, MAX_URL_SAFE } from '../../lib/utils/url-sharing';
   import { t } from '../../lib/i18n';
   import CalcReportDialog from '../CalcReportDialog.svelte';
+  import { isDesktop, desktopOpen, desktopSave } from '../../lib/desktop/bridge';
 
   let fileInput: HTMLInputElement;
   let showCalcReport = $state(false);
@@ -83,13 +84,13 @@
   </button>
   {#if showProject}
   <div class="file-grid">
-    <button class="file-btn" onclick={saveProject} title={t('project.saveTabTooltip')}>
+    <button class="file-btn" onclick={() => isDesktop() ? void desktopSave(false) : saveProject()} title={t('project.saveTabTooltip')}>
       {t('project.saveTab')}
     </button>
     <button class="file-btn" onclick={saveSession} title={t('project.saveSessionTooltip')}>
       {t('project.saveSession')}
     </button>
-    <button class="file-btn" onclick={() => fileInput?.click()} title={t('project.openTooltip')}>
+    <button class="file-btn" onclick={() => isDesktop() ? void desktopOpen() : fileInput?.click()} title={t('project.openTooltip')}>
       {t('project.open')}
     </button>
   </div>

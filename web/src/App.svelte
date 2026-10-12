@@ -41,6 +41,7 @@
   import { runLiveCalc, runGlobalSolve } from './lib/engine/live-calc';
   import LandingPage from './components/LandingPage.svelte';
   import AiDrawer from './components/AiDrawer.svelte';
+  import DesktopBar from './components/desktop/DesktopBar.svelte';
 
   if (typeof window !== 'undefined') {
     const redirectedRoute = new URLSearchParams(location.search).get('route');
@@ -614,6 +615,9 @@
     window.addEventListener('mouseup', onUp);
   }
 </script>
+
+<DesktopBar />
+
 
 <svelte:window onkeydown={handleProKeydown} onclick={handleProBarClickOutside} />
 
