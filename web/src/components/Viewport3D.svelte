@@ -100,6 +100,7 @@
   // to one raycast per frame instead of one per event.
   let pendingHoverEvent: MouseEvent | null = null;
   let hoverRafId: number | null = null;
+  let lastHoverRaycastAt = 0;
 
   // ─── Box select state ──────────────────────────────────────
   // Mode to return to when the quick sections toggle is switched off — keeps
@@ -2033,6 +2034,16 @@
       if (!ev || !camera || !initialized) return;
       // Re-check orbit in case it started between schedule and frame.
       if (isOrbiting) return;
+      // The hover query is useful but an expensive BVH raycast can saturate
+      // the main thread on large professional structures. Cap it at 20 Hz.
+      const now = performance.now();
+      const throttleHover = shouldUseFastOrbitLOD(
+        qualityPreset,
+        { elements: modelStore.elements.size, shells: modelStore.plates.size + modelStore.quads.size, loads: modelStore.loads.length },
+        uiStore.renderMode3D, resultsStore.diagramType,
+      );
+      if (throttleHover && now - lastHoverRaycastAt < 50) return;
+      lastHoverRaycastAt = now;
       runHoverRaycast(ev);
     });
   }
