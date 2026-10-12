@@ -15,22 +15,47 @@ function Exec([string]$Command, [string[]]$Arguments) {
     & $Command @Arguments
     if ($LASTEXITCODE -ne 0) { throw "Command failed ($LASTEXITCODE): $Command" }
 }
-foreach ($cmd in @('node','npm','rustup','cargo')) {
+# Install checks are Windows-specific. Rustup typically lives in %USERPROFILE%\.cargo\bin,
+# which is not visible to an already-open terminal after the Rust installer finishes.
+foreach ($cmd in @('node','npm')) {
     if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
-        throw "Missing $cmd. Install Node.js 22 and Rustup, then retry."
+        throw "Missing $cmd. Install Node.js 22 LTS from https://nodejs.org/ and reopen PowerShell."
     }
 }
-if (-not (Get-Command 'wasm-pack' -ErrorAction SilentlyContinue)) {
-    Write-Host "Installing wasm-pack..." -ForegroundColor Cyan
-    Exec 'cargo' @('+stable','install','wasm-pack','--locked')
+$cargoBin = Join-Path $env:USERPROFILE '.cargo\bin'
+if ((Test-Path (Join-Path $cargoBin 'rustup.exe')) -and
+    -not (Get-Command 'rustup' -ErrorAction SilentlyContinue)) {
+    $env:Path = "$cargoBin;$env:Path"
+    Write-Host "Rustup found on disk; updated PATH in this PowerShell process." -ForegroundColor Green
+}
+if (-not (Get-Command 'rustup' -ErrorAction SilentlyContinue)) {
+    if (-not (Get-Command 'winget' -ErrorAction SilentlyContinue)) {
+        throw "Rustup missing. Install from https://rustup.rs/ or run winget install --id Rustlang.Rustup -e in PowerShell."
+    }
+    Write-Host "Rustup is missing. Installing official Rustlang.Rustup with winget..." -ForegroundColor Yellow
+    Exec 'winget' @('install','--id','Rustlang.Rustup','-e','--source','winget','--accept-package-agreements','--accept-source-agreements')
+    if (Test-Path (Join-Path $cargoBin 'rustup.exe')) {
+        $env:Path = "$cargoBin;$env:Path"
+    }
+}
+foreach ($cmd in @('rustup','cargo','rustc')) {
+    if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
+        throw "Missing $cmd after Rustup installation. Close PowerShell, open a new terminal, and rerun build-windows.ps1. Check $cargoBin."
+    }
 }
 $root = $PSScriptRoot
 $web = Join-Path $root 'web'
 if (-not (Test-Path (Join-Path $web 'package.json'))) { throw "Run this script from a complete Git checkout." }
 
-# The checked-in engine/rust-toolchain.toml uses nightly + build-std.
+# Tauri on Windows requires MSVC, not GNU. Nightly is needed by this engine.
+Exec 'rustup' @('default','stable-msvc')
 Exec 'rustup' @('toolchain','install','stable','--profile','minimal')
 Exec 'rustup' @('toolchain','install','nightly','--profile','minimal','--component','rust-src','--target','wasm32-unknown-unknown')
+
+if (-not (Get-Command 'wasm-pack' -ErrorAction SilentlyContinue)) {
+    Write-Host "Installing wasm-pack..." -ForegroundColor Cyan
+    Exec 'cargo' @('+stable','install','wasm-pack','--locked')
+}
 
 Push-Location $root
 try {
