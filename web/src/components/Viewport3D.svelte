@@ -19,7 +19,7 @@
   import { updateGrid as _updateGrid, createFatAxes as _createFatAxes, addAxisLabels as _addAxisLabels } from '../lib/viewport3d/grid';
   import { syncNodes as _syncNodes, syncElements as _syncElements, syncSupports as _syncSupports, syncLoads as _syncLoads, syncShells as _syncShells, syncSelection as _syncSelection, syncLocalAxes as _syncLocalAxes, syncMemberOffsets as _syncMemberOffsets, syncShellOffsets as _syncShellOffsets, applyElementVisibility, type SceneSyncContext } from '../lib/viewport3d/scene-sync';
   import { syncDeformed as _syncDeformed, syncDiagrams3D as _syncDiagrams3D, syncColorMap3D as _syncColorMap3D, syncVerificationLabels as _syncVerificationLabels, syncReactions as _syncReactions, syncConstraintForces as _syncConstraintForces, syncLabels3D as _syncLabels3D, syncDespiece3D as _syncDespiece3D, DIAGRAM_3D_TYPES, type ResultsSyncContext } from '../lib/viewport3d/results-sync';
-  import { applyLowDetail, isHeavyModel } from '../lib/viewport3d/lod';
+  import { applyLowDetail, shouldUseFastOrbitLOD, idlePixelRatio, type ViewQuality3D } from '../lib/viewport3d/lod';
 
   let container: HTMLDivElement;
   let renderer: THREE.WebGLRenderer;
@@ -30,6 +30,22 @@
   let controls: OrbitControls;
   let animFrameId: number;
   let initialized = false;
+  // This setting affects only rendering quality, not FEM inputs or results.
+  let qualityPreset = $state<ViewQuality3D>('auto');
+  let showPerformanceHud = $state(false);
+  let fastPreviewActive = $state(false);
+  let performanceStats = $state({ fps: 0, drawCalls: 0, triangles: 0, members: 0, renderMs: 0 });
+  let applyQualityPreset: () => void = () => {};
+  function changeQualityPreset(next: ViewQuality3D) {
+    qualityPreset = next;
+    try { localStorage.setItem('go-viewport3d-quality', next); } catch { /* private browsing */ }
+    applyQualityPreset();
+  }
+  function togglePerformanceHud() {
+    showPerformanceHud = !showPerformanceHud;
+    try { localStorage.setItem('go-viewport3d-performance-hud', showPerformanceHud ? '1' : '0'); } catch { /* private browsing */ }
+    invalidate();
+  }
 
   // ─── Invalidation-based rendering ───────────────────────────
   // Declared here so $effect blocks can call invalidate() from outside onMount.
@@ -201,6 +217,12 @@
   });
 
   onMount(() => {
+    // Restore visual preferences only. No project data is changed.
+    try {
+      const saved = localStorage.getItem('go-viewport3d-quality');
+      if (saved === 'auto' || saved === 'performance' || saved === 'detail') qualityPreset = saved;
+      showPerformanceHud = localStorage.getItem('go-viewport3d-performance-hud') === '1';
+    } catch { /* storage unavailable */ }
     // Scene
     scene = new THREE.Scene();
     scene.background = new THREE.Color(COLORS.background);
@@ -244,8 +266,10 @@
     camera = uiStore.cameraMode3D === 'orthographic' ? orthoCamera : perspCamera;
 
     // Renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer = new THREE.WebGLRenderer({
+      antialias: true, preserveDrawingBuffer: true, powerPreference: 'high-performance',
+    });
+    renderer.setPixelRatio(idlePixelRatio(window.devicePixelRatio, qualityPreset));
     renderer.localClippingEnabled = true;
     container.appendChild(renderer.domElement);
 
@@ -287,19 +311,23 @@
     window.addEventListener('keydown', onNavKeyDown);
     window.addEventListener('keyup', onNavKeyUp);
 
-    // Sync camera state to uiStore on orbit change (throttled)
+    // Avoid flooding reactive UI stores on every OrbitControls change.
     let cameraSyncTimer: ReturnType<typeof setTimeout> | null = null;
-    controls.addEventListener('change', () => {
-      invalidate(); // Re-render on orbit/pan/zoom via OrbitControls
-      if (cameraSyncTimer) return; // throttle
+    const syncCameraToStore = () => {
+      const pos = camera.position;
+      const tgt = controls.target;
+      uiStore.cameraPosition3D = { x: pos.x, y: pos.y, z: pos.z };
+      uiStore.cameraTarget3D = { x: tgt.x, y: tgt.y, z: tgt.z };
+    };
+    const onOrbitChange = () => {
+      invalidate();
+      if (cameraSyncTimer) return;
       cameraSyncTimer = setTimeout(() => {
         cameraSyncTimer = null;
-        const pos = camera.position;
-        const tgt = controls.target;
-        uiStore.cameraPosition3D = { x: pos.x, y: pos.y, z: pos.z };
-        uiStore.cameraTarget3D = { x: tgt.x, y: tgt.y, z: tgt.z };
-      }, 100);
-    });
+        syncCameraToStore();
+      }, 250);
+    };
+    controls.addEventListener('change', onOrbitChange);
 
     // Lighting
     const ambient = new THREE.AmbientLight(0xffffff, 0.6);
@@ -345,6 +373,8 @@
     // the scene is dirty (needsRender=true) or continuous rendering is required
     // (animations, keyboard navigation, or the user override flag).
     let needsRender = true;
+    let measurementStart = performance.now();
+    let measurementFrames = 0;
     let dampingFrames = 0; // extra frames for OrbitControls damping to settle
 
     /** Check if any animation is currently active that requires continuous rendering */
