@@ -373,6 +373,7 @@
     // the scene is dirty (needsRender=true) or continuous rendering is required
     // (animations, keyboard navigation, or the user override flag).
     let needsRender = true;
+    let rafScheduled = false;
     let measurementStart = performance.now();
     let measurementFrames = 0;
     let dampingFrames = 0; // extra frames for OrbitControls damping to settle
@@ -394,12 +395,19 @@
       return uiStore.continuousRendering || keysPressed.size > 0 || isAnimating() || dampingFrames > 0;
     }
 
-    /** Mark the scene as needing a re-render. Schedules a frame if one isn't pending. */
+    /** Exactly one WebGL requestAnimationFrame may be outstanding at a time.
+     * OrbitControls.update() emits "change" inside renderOnce; the old code
+     * scheduled one frame in change and a SECOND in the render-loop tail,
+     * unnecessarily doubling heavy-model work during damping/orbit.
+     */
+    function scheduleFrame() {
+      if (rafScheduled) return;
+      rafScheduled = true;
+      animFrameId = requestAnimationFrame(renderOnce);
+    }
     function _invalidate() {
-      if (!needsRender) {
-        needsRender = true;
-        animFrameId = requestAnimationFrame(renderOnce);
-      }
+      needsRender = true;
+      scheduleFrame();
     }
     // Expose invalidate to the outer scope for use in $effect blocks
     invalidate = _invalidate;
@@ -454,6 +462,7 @@
     }
 
     function renderOnce() {
+      rafScheduled = false;
       if (!needsRender && !needsContinuous()) return;
       needsRender = false;
 
@@ -514,13 +523,11 @@
       renderer.render(scene, camera);
       drawAxisGizmo();
 
-      // Keep looping if continuous rendering is needed
-      if (needsContinuous() || needsRender) {
-        animFrameId = requestAnimationFrame(renderOnce);
-      }
+      // Camera events, dynamic results and user interactions share ONE frame queue.
+      if (needsContinuous() || needsRender) scheduleFrame();
     }
     // Kick off the first frame
-    animFrameId = requestAnimationFrame(renderOnce);
+    scheduleFrame();
 
     // When OrbitControls interaction ends, allow damping frames to settle
     // During camera manipulation, drop to pixelRatio=1 so the GPU pushes ~4× fewer
