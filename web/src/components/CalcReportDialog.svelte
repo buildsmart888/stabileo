@@ -114,7 +114,10 @@
     if (isNativeDesktop()) {
       // WebView2 may block window.open(blob:); render a dedicated print-only iframe.
       desktopReportTitle = projectName || 'Structural Calculation Report';
-      desktopReportHtml = generateCalcReportHtml(data);
+      desktopReportHtml = generateCalcReportHtml(data).replace(
+        '<button class="print-btn no-print" onclick="window.print()">Print / PDF</button>',
+        ''
+      );
     } else {
       openCalcReport(data);
     }

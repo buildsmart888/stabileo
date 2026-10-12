@@ -51,6 +51,24 @@ This is a public repository, whose standard hosted runner minutes are normally f
 If GitHub still rejects all jobs before runner assignment, contact GitHub Support
 and include the run IDs and no-steps evidence. The code cannot fix hosted-runner provisioning.
 
+
+## Local Windows acceptance status (12 October 2026)
+
+Desktop **v0.1.0**: user-confirmed successful NSIS x64 installer build, local installation and startup, 2D reactions/shear/moment, 3D deformed shape, native .ded save/load round-trip and offline solving. This confirms five out of six initial acceptance areas. The sixth area (PDF, Excel and Recovery) had not yet been verified.
+
+Desktop **v0.1.1** (this branch) adds native Excel Save As, a print-targeted report preview and a timestamped recovery list. The new features are **code-complete but await a fresh Windows rebuild and interactive retest**. This is not a certified engineering release.
+
+## v0.1.1 export and recovery QA
+
+1. Update the Desktop branch and build using: `powershell -ExecutionPolicy Bypass -File .\build-windows.ps1 -SkipEngineTests`. Install the freshly created **0.1.1** NSIS executable; do not retest with the older 0.1.0 app.
+2. **Excel**: Open a 2D example, solve, go to Project > Export / Import > Excel; use the Windows Save dialog to write an `.xlsx`. Open in Excel/LibreOffice and verify populated *Summary, Elements, Nodes, Reactions, Materials, Sections* worksheets, no `#NAME?` / `NaN` / `undefined`, correct units and spot-check support reactions against the on-screen solver results. Repeat using a 3D model and inspect `Fx,Fy,Fz,Mx,My,Mz`, displacement and internal-force columns. Cancel the dialog and verify no file is created.
+3. **PDF**: After solving 2D and 3D samples, click Project > PDF, enter the report metadata, Generate. The desktop preview should open **inside the app** (not in an external browser window). Click **Print / Save as PDF**, select **Microsoft Print to PDF** or the Windows equivalent, choose a destination, then verify PDF pages, diagrams/tables where supported, headings, units, reaction totals, page breaks and absence of cropped text. This uses the Windows print dialog; the app does not directly generate PDF bytes. If printing is unavailable, use **Save HTML** and print the saved report from a browser. The output must still be reviewed for engineering correctness.
+4. **Recovery**: Open a working structure, make a change, wait at least 30 seconds, click the desktop toolbar's **Recovery**. A timestamped entry with the model name should appear. Change the model again, click Restore, cancel the confirmation, and verify no change. Click Restore again and confirm; the saved snapshot should load into the current tab. Use **Save As** to retain the recovered version. Restart the application and confirm entries remain visible. Recovery saves the active tab periodically, not all tabs at once.
+5. **Regression**: Recheck previously passing features: Windows startup, 2D/3D solve, .ded open/save round trip, true offline solving. Test on representative engineering models and independently check loads, reactions, deformations, and unit conventions before design use.
+
+Reminder: `npm run desktop:smoke` checks Rust fixture reference values and XLSX serialization.
+`npm run desktop:verify-solver` executes actual WASM Rust 2D/3D analyses.
+
 ## Notes
 - Project Open/Save/Save As commands use Tauri-hosted native dialogs.
 - Periodic recovery snapshots live in the Tauri per-app local data directory.

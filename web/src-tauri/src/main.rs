@@ -420,6 +420,31 @@ mod tests {
     }
 
     #[test]
+    fn recovery_index_contains_valid_snapshots_only() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let folder = std::env::temp_dir().join(format!("go-stabileo-test-{nonce}"));
+        fs::create_dir_all(&folder).unwrap();
+        fs::write(
+            folder.join("tab_123.ded"),
+            r#"{"version":"2.0","name":"Test Portal Frame","snapshot":{}}"#,
+        )
+        .unwrap();
+        fs::write(folder.join("invalid.ded"), b"not json").unwrap();
+        fs::write(folder.join("ignored.txt"), b"whatever").unwrap();
+
+        let files = scan_recovery(&folder).unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].id, "tab_123");
+        assert_eq!(files[0].model_name, "Test Portal Frame");
+        assert!(files[0].modified_at_ms > 0);
+
+        fs::remove_dir_all(&folder).unwrap();
+    }
+
+    #[test]
     fn validates_export_payload_and_blocks_unsupported_formats() {
         let encoded = base64::engine::general_purpose::STANDARD.encode(b"PK\x03\x04xlsx-test");
         let (format, bytes) = decode_export("xlsx", &encoded).unwrap();

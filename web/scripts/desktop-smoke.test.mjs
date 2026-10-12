@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import * as XLSX from 'xlsx';
 const base = new URL('../../engine/tests/fixtures/', import.meta.url);
 test('2D cantilever reference equilibrium and tip displacement', async () => {
  const input = JSON.parse(await readFile(new URL('ex-cantilever-input.json',base)));
@@ -27,4 +28,16 @@ test('reference fixtures contain finite numbers', async () => {
   const raw=await readFile(new URL(name,base),'utf8');
   assert.ok(!raw.includes('NaN')&&!raw.includes('Infinity'));
  }
+});
+
+test('Desktop XLSX export payload round trips with valid ZIP data and numeric values', () => {
+  const wb = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet([['Element', 'Moment (kN.m)'], [1, 42.25], [2, -13.5]]);
+  XLSX.utils.book_append_sheet(wb, sheet, 'Forces');
+  const encoded = XLSX.write(wb, { bookType: 'xlsx', type: 'base64', compression: true });
+  const raw = Buffer.from(encoded, 'base64');
+  assert.equal(raw.subarray(0, 4).toString('hex'), '504b0304');
+  const restored = XLSX.read(raw, { type: 'buffer' });
+  const rows = XLSX.utils.sheet_to_json(restored.Sheets.Forces, { header: 1 });
+  assert.deepEqual(rows, [['Element', 'Moment (kN.m)'], [1, 42.25], [2, -13.5]]);
 });
