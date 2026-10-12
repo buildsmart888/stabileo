@@ -2447,6 +2447,30 @@
     </button>
   </div>
 
+  <!-- 3D visual quality and diagnostics: no solver changes. -->
+  <div class="performance-panel" role="group" aria-label="3D rendering quality">
+    <label for="quality-preset-3d">3D Quality</label>
+    <select id="quality-preset-3d" value={qualityPreset}
+      onchange={(e) => changeQualityPreset(e.currentTarget.value as ViewQuality3D)}
+      title="Auto reduces detail while orbiting complex structural models">
+      <option value="auto">Auto</option>
+      <option value="performance">Fast</option>
+      <option value="detail">Detail</option>
+    </select>
+    <button onclick={togglePerformanceHud} aria-pressed={showPerformanceHud}
+      title="Show render frame rate and WebGL draw calls">FPS</button>
+    {#if fastPreviewActive}<span class="performance-preview">Fast orbit preview</span>{/if}
+    {#if showPerformanceHud}
+      <div class="performance-stats">
+        <span>FPS (motion): <b>{performanceStats.fps}</b></span>
+        <span>Draw calls: <b>{performanceStats.drawCalls}</b></span>
+        <span>Triangles: <b>{performanceStats.triangles.toLocaleString()}</b></span>
+        <span>Members: <b>{performanceStats.members.toLocaleString()}</b></span>
+        <span>Frame submit: <b>{performanceStats.renderMs.toFixed(1)} ms</b></span>
+      </div>
+    {/if}
+  </div>
+
   <!-- Clipping plane controls -->
   {#if uiStore.clippingEnabled}
     <div class="clip-controls" style="top: {uiStore.floatingToolsTopOffset}px; left: {uiStore.showFloatingTools ? 12 : 48}px">
