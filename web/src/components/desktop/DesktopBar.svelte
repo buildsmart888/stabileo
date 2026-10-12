@@ -1,7 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { downloadExcel } from '../../lib/store/file';
+  import CalcReportDialog from '../CalcReportDialog.svelte';
   import { isDesktop, desktopOpen, desktopSave, desktopAutoSave, desktopListRecovery, desktopRecoverById, type RecoveryEntry } from '../../lib/desktop/bridge';
   let enabled = $state(false);
+  let showPdfReport = $state(false);
   let showRecovery = $state(false);
   let loadingRecovery = $state(false);
   let recoveryFiles = $state<RecoveryEntry[]>([]);
@@ -49,8 +52,11 @@
     <button onclick={() => void desktopSave(false)}>Save Ctrl+S</button>
     <button onclick={() => void desktopSave(true)}>Save As</button>
     <button onclick={() => void openRecoveryPanel()}>Recovery</button>
+    <button onclick={downloadExcel}>Excel</button>
+    <button onclick={() => showPdfReport = true}>PDF Report</button>
     <span class="offline">Local solver · Offline capable</span>
   </nav>
+  <CalcReportDialog bind:open={showPdfReport} />
   {#if showRecovery}
     <div class="recovery-overlay">
       <section class="recovery-dialog" role="dialog" aria-modal="true" aria-label="Recovery snapshots">
