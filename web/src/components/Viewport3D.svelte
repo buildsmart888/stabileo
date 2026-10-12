@@ -2448,7 +2448,10 @@
   </div>
 
   <!-- 3D visual quality and diagnostics: no solver changes. -->
-  <div class="performance-panel" role="group" aria-label="3D rendering quality">
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div class="performance-panel" role="group" aria-label="3D rendering quality"
+    onmousedown={(e) => e.stopPropagation()}
+    onmouseup={(e) => e.stopPropagation()}>
     <label for="quality-preset-3d">3D Quality</label>
     <select id="quality-preset-3d" value={qualityPreset}
       onchange={(e) => changeQualityPreset(e.currentTarget.value as ViewQuality3D)}
