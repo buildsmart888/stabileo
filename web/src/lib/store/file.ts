@@ -534,6 +534,10 @@ export function downloadSVG(): void {
 
 /** Load the large spreadsheet library only after the user requests Excel export. */
 export async function downloadExcel(): Promise<void> {
+  if (resultsStore.resultsOrigin3D === 'native-qa' && isMode3D(uiStore.analysisMode)) {
+    uiStore.toast('Excel export blocked: Native QA results are not certified.', 'error');
+    return;
+  }
   try {
     const safeName = modelStore.model.name.replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ _-]/g, '').trim() || t('file.defaultAnalysis');
     const { exportToExcel } = await import('../export/excel');
