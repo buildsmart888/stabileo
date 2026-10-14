@@ -3,7 +3,7 @@
  * Never replaces the production WASM Solve button. A safe subset of models
  * only: linear, single unfactored 3D frame/truss cases, no advanced geometry.
  */
-import { modelStore, resultsStore, tabManager, uiStore } from '../store';
+import { modelStore, resultsStore, tabManager, uiStore, verificationStore } from '../store';
 import { serializeInput3D } from '../engine/wasm-solver';
 import { modelHasMemberOffsets } from '../engine/member-offsets';
 import { modelHasJoints3D } from '../engine/expand-joints-3d';
@@ -85,6 +85,10 @@ export async function runNativeQa3D(): Promise<void> {
     // Additional guard at the presentation boundary. A superseding
     // model/route update must not allow old data to be displayed.
     if (getRevision() !== revision) throw new StaleNativeResultError();
+    // Do not mix previous nonlinear/combination/design-check conclusions
+    // into an experimental single-case Native QA display.
+    resultsStore.clear3D();
+    verificationStore.clear();
     resultsStore.setResults3D(result, false, 'native-qa');
     desktopQaMonitor.finishNativeQa(runId, 'complete', performance.now() - start);
     uiStore.toast(
