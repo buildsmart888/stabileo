@@ -4,6 +4,7 @@ pub mod element;
 pub mod solver;
 pub mod postprocess;
 pub mod section;
+pub mod native_api;
 
 use wasm_bindgen::prelude::*;
 
@@ -16,23 +17,13 @@ pub fn init() {
 /// Solve 2D linear static analysis. JSON in → JSON out.
 #[wasm_bindgen]
 pub fn solve_2d(json: &str) -> Result<String, JsValue> {
-    let input: types::SolverInput = serde_json::from_str(json)
-        .map_err(|e| JsValue::from_str(&format!("Parse error: {}", e)))?;
-    let results = solver::linear::solve_2d(&input)
-        .map_err(|e| JsValue::from_str(&e))?;
-    serde_json::to_string(&results)
-        .map_err(|e| JsValue::from_str(&format!("Serialize error: {}", e)))
+    native_api::solve_linear_2d_json(json).map_err(|error| JsValue::from_str(&error))
 }
 
 /// Solve 3D linear static analysis. JSON in → JSON out.
 #[wasm_bindgen]
 pub fn solve_3d(json: &str) -> Result<String, JsValue> {
-    let input: types::SolverInput3D = serde_json::from_str(json)
-        .map_err(|e| JsValue::from_str(&format!("Parse error: {}", e)))?;
-    let results = solver::linear::solve_3d(&input)
-        .map_err(|e| JsValue::from_str(&e))?;
-    serde_json::to_string(&results)
-        .map_err(|e| JsValue::from_str(&format!("Serialize error: {}", e)))
+    native_api::solve_linear_3d_json(json).map_err(|error| JsValue::from_str(&error))
 }
 
 /// Solve 2D P-Delta analysis. JSON in → JSON out.
