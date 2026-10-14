@@ -33,11 +33,15 @@ export async function nativeSolve2D(input: SolverInput): Promise<AnalysisResults
   return JSON.parse(json) as AnalysisResults;
 }
 
-export async function nativeSolve3D(input: SolverInput3D): Promise<AnalysisResults3D> {
+export async function nativeSolve3DJson(inputJson: string): Promise<AnalysisResults3D> {
   if (!hasNativeLinearSolver()) throw new Error('Native Rust solver requires Tauri Desktop.');
   const invoke = (window as DesktopWindow).__TAURI__!.core!.invoke;
-  const json = await invoke<string>('desktop_solve_linear', { mode: '3d', inputJson: serializeInput3D(input) });
+  const json = await invoke<string>('desktop_solve_linear', { mode: '3d', inputJson });
   return JSON.parse(json) as AnalysisResults3D;
+}
+
+export async function nativeSolve3D(input: SolverInput3D): Promise<AnalysisResults3D> {
+  return nativeSolve3DJson(serializeInput3D(input));
 }
 
 /** Opt-in safe 3D native execution. Supply an immutable revision fingerprint of
