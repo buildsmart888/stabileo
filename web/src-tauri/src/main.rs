@@ -459,6 +459,27 @@ async fn desktop_export_file(
     Ok(Some(path.to_string_lossy().into_owned()))
 }
 
+// Shared Rust FEM engine is used directly in-process, without a subprocess or WASM.
+const MAX_SOLVER_JSON_BYTES: usize = 32 * 1024 * 1024;
+
+fn native_linear_json(mode: &str, input_json: &str) -> Result<String, String> {
+    if input_json.len() > MAX_SOLVER_JSON_BYTES {
+        return Err("Structural model exceeds the 32 MiB native solve limit.".into());
+    }
+    match mode {
+        "2d" => dedaliano_engine::native_api::solve_linear_2d_json(input_json),
+        "3d" => dedaliano_engine::native_api::solve_linear_3d_json(input_json),
+        _ => Err("Unsupported native mode; use 2d or 3d.".into()),
+    }
+}
+
+#[tauri::command]
+async fn desktop_solve_linear(mode: String, input_json: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || native_linear_json(&mode, &input_json))
+        .await
+        .map_err(|error| format!("Native FEM task failed: {error}"))?
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(DesktopState::default())
@@ -472,6 +493,7 @@ fn main() {
             desktop_list_recovery,
             desktop_read_recovery,
             desktop_export_file,
+            desktop_solve_linear,
         ])
         .run(tauri::generate_context!())
         .expect("failed to start GO Stabileo Desktop");
