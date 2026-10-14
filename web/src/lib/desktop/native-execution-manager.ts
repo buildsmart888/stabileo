@@ -41,7 +41,8 @@ export class NativeExecutionManager {
     const id = ++this.nextId;
     // Cancel old queued request immediately; never start its Rust work.
     if (this.pending) {
-      this.cancelled.add(this.pending.id);
+      // Queued work never started; rejecting immediately is sufficient.
+      // Do not retain its ID in the cancelled set (would leak on every edit).
       this.pending.reject(new StaleNativeResultError());
       this.pending = undefined;
     }
@@ -55,10 +56,9 @@ export class NativeExecutionManager {
     });
   }
   cancel(): void {
+    if (!this.pending && !this.active) return;
     if (this.pending) {
-      const id = this.pending.id;
       this.pending.reject(new StaleNativeResultError());
-      this.cancelled.add(id);
       this.pending = undefined;
     }
     if (this.active) this.cancelled.add(this.active.id);
