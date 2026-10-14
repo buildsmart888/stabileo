@@ -42,3 +42,25 @@ at 1k/5k/10k elements, and Tauri integration.
 Stabileo is AGPL-3.0. A native adapter does not change the
 obligations of derivative software. Open Core and closed Professional
 offerings require an appropriate licensing strategy and legal review.
+
+## End-to-end differential verification
+
+The CI test job now builds a native CLI and a Node.js-compatible WASM artifact,
+then executes scripts/verify-native-wasm-parity.cjs with six existing
+2D/3D fixture models. It compares all primary displacement, reaction and
+member-end force components by stable node/member ID, rather than matching
+array ordering. Its floating-point tolerances are explicitly specified.
+
+Two cantilever fixtures also have independent closed-form deflection and
+reaction checks. Advanced nonlinear, shell, modal and design-check parity
+are not yet covered. These gates require functioning GitHub-hosted runners.
+
+### Diagnosing GitHub Actions infrastructure failures
+
+GitHub run 38587718493 reported three failed jobs with no assigned runner,
+zero execution steps and zero billable runner time. Historical workflow
+failures predate this change. This is NOT evidence of Rust compilation
+errors. Check the repository's Actions enablement, organization/plan
+limits, billing/spend limits and account restrictions in GitHub Settings,
+and rerun the job after runner access is restored. Do not weaken
+engineering validation gates to work around missing runners.
