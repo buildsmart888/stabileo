@@ -195,6 +195,10 @@
   // ─── Run design check ──────────────────────────────────────────
   function runDesignCheck() {
     error = null;
+    if (resultsStore.resultsOrigin3D === 'native-qa') {
+      error = 'Design blocked: Native QA results are not verified. Run standard WASM Solve first.';
+      return;
+    }
     if (!results3D) { error = t('pro.solveFirst'); return; }
 
     running = true;
@@ -710,7 +714,7 @@
           <option value={code.id}>{code.label}</option>
         {/each}
       </select>
-      <button class="run-btn" onclick={runDesign} disabled={!hasResults || running}>
+      <button class="run-btn" onclick={runDesign} disabled={!hasResults || running || resultsStore.resultsOrigin3D === 'native-qa'}>
         {running ? 'Designing...' : 'Run Design'}
       </button>
     </div>
