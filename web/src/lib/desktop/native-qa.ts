@@ -85,7 +85,7 @@ export async function runNativeQa3D(): Promise<void> {
     // Additional guard at the presentation boundary. A superseding
     // model/route update must not allow old data to be displayed.
     if (getRevision() !== revision) throw new StaleNativeResultError();
-    resultsStore.setResults3D(result);
+    resultsStore.setResults3D(result, false, 'native-qa');
     desktopQaMonitor.finishNativeQa(runId, 'complete', performance.now() - start);
     uiStore.toast(
       'Native Rust QA result (3D linear only). Verify parity before design use. ' +
