@@ -12,7 +12,7 @@ function wasmStubPlugin(): Plugin {
   return {
     name: 'wasm-stub',
     resolveId(id) {
-      if (id.includes('wasm/dedaliano_engine') && id.endsWith('.js') && !existsSync(wasmGlue)) {
+      if (process.env.GO_DESKTOP_STRICT_WASM !== '1' && id.includes('wasm/dedaliano_engine') && id.endsWith('.js') && !existsSync(wasmGlue)) {
         return '\0wasm-stub';
       }
     },

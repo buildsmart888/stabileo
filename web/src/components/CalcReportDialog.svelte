@@ -1,6 +1,8 @@
 <script lang="ts">
   import { modelStore, resultsStore, uiStore, verificationStore } from '../lib/store';
-  import { openCalcReport, type CalcReportData, type CalcReportConfig, type ResultProvenance, type AnalysisModeLabel } from '../lib/engine/calc-report';
+  import { openCalcReport, generateCalcReportHtml, type CalcReportData, type CalcReportConfig, type ResultProvenance, type AnalysisModeLabel } from '../lib/engine/calc-report';
+  import { isNativeDesktop } from '../lib/desktop/native-file';
+  import DesktopReportPreview from './desktop/DesktopReportPreview.svelte';
   import { t } from '../lib/i18n';
 
   let { open = $bindable(false) }: { open: boolean } = $props();
@@ -9,6 +11,8 @@
   let engineerName = $state('');
   let companyName = $state('');
   let notes = $state('');
+  let desktopReportHtml = $state('');
+  let desktopReportTitle = $state('Structural Calculation Report');
 
   // The dialog component stays mounted for the app's lifetime, so the $state
   // initializer above only sees the startup model. Re-seed the project name
@@ -107,7 +111,16 @@
       results3D: is3D ? (resultsStore.results3D ?? undefined) : undefined,
     };
 
-    openCalcReport(data);
+    if (isNativeDesktop()) {
+      // WebView2 may block window.open(blob:); render a dedicated print-only iframe.
+      desktopReportTitle = projectName || 'Structural Calculation Report';
+      desktopReportHtml = generateCalcReportHtml(data).replace(
+        '<button class="print-btn no-print" onclick="window.print()">Print / PDF</button>',
+        ''
+      );
+    } else {
+      openCalcReport(data);
+    }
     open = false;
   }
 </script>
@@ -146,6 +159,8 @@
   </div>
 </div>
 {/if}
+
+<DesktopReportPreview bind:html={desktopReportHtml} title={desktopReportTitle} />
 
 <style>
   .dialog-overlay {

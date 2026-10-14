@@ -1,0 +1,77 @@
+name: GO Desktop Windows NSIS
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/go-desktop-tauri-mvp-20261012]
+    paths:
+      - 'web/src-tauri/**'
+      - 'web/src/lib/desktop/**'
+      - 'web/src/components/desktop/**'
+      - 'web/scripts/**'
+      - 'web/package.json'
+      - 'build-windows.ps1'
+      - 'web/src/App.svelte'
+      - '.github/workflows/desktop-windows.yml'
+  pull_request:
+    paths:
+      - 'web/src-tauri/**'
+      - 'web/src/lib/desktop/**'
+      - 'web/src/components/desktop/**'
+      - 'web/scripts/**'
+      - 'web/package.json'
+      - '.github/workflows/desktop-windows.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  desktop-windows:
+    name: Native Rust + WASM + NSIS
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+          targets: wasm32-unknown-unknown
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@wasm-pack
+      - name: Install frontend and Tauri CLI
+        working-directory: web
+        run: npm install --no-package-lock
+      - name: Engine regression unit tests
+        run: cargo +stable test --manifest-path engine/Cargo.toml --lib
+      - name: Build real Rust WASM engine (nightly build-std)
+        working-directory: web
+        run: npm run wasm
+      - name: Execute Rust WASM 2D and 3D solver cases
+        working-directory: web
+        run: npm run desktop:verify-solver
+      - name: Desktop smoke/reference fixture checks
+        working-directory: web
+        run: npm run desktop:smoke
+      - name: Build standalone offline web assets
+        working-directory: web
+        run: npm run desktop:frontend
+      - name: Ensure bundled WASM is present
+        shell: pwsh
+        run: |
+          $wasm = Get-ChildItem web/dist -Recurse -Filter "*.wasm"
+          if (-not $wasm) { throw "No WASM binaries in dist. Reject installer." }
+          Write-Host "WASM files:" ($wasm.FullName -join ", ")
+      - name: Rust desktop unit tests
+        run: cargo +stable test --manifest-path web/src-tauri/Cargo.toml
+      - name: Build Windows NSIS installer
+        working-directory: web
+        run: npm run desktop:build
+      - name: Upload unsigned installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-structural-analysis-windows-unsigned-nsis
+          path: web/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 14

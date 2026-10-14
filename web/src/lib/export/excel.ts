@@ -13,6 +13,7 @@
  */
 
 import * as XLSX from 'xlsx';
+import { isNativeDesktop, nativeSaveExport } from '../desktop/native-file';
 import { modelStore, resultsStore, uiStore } from '../store';
 import { isMode3D } from '../store/file';
 import { t } from '../i18n';
@@ -78,7 +79,9 @@ function createSummarySheet(): XLSX.WorkSheet {
       sumFx += r.fx; sumFy += r.fy; sumFz += r.fz;
       sumMx2 += r.mx; sumMy2 += r.my; sumMz2 += r.mz;
     }
-    data.push([t('excel.equilibriumCheck')]);
+    // These figures are SUMS OF REACTIONS ONLY, not force/moment equilibrium residuals.
+    // Distributed and point loads must also be included for a genuine equilibrium check.
+    data.push(['Support reaction totals (not a full equilibrium check)']);
     data.push(['ΣFx', sumFx.toFixed(4), 'kN']);
     data.push(['ΣFy', sumFy.toFixed(4), 'kN']);
     data.push(['ΣFz', sumFz.toFixed(4), 'kN']);
@@ -104,7 +107,9 @@ function createSummarySheet(): XLSX.WorkSheet {
       sumRz += get2DDisplayReactionVertical(r);
       sumMy += get2DDisplayMoment(r);
     }
-    data.push([t('excel.equilibriumCheck')]);
+    // These figures are SUMS OF REACTIONS ONLY, not force/moment equilibrium residuals.
+    // Distributed and point loads must also be included for a genuine equilibrium check.
+    data.push(['Support reaction totals (not a full equilibrium check)']);
     data.push(['ΣRx', sumRx.toFixed(4), 'kN']);
     data.push(['ΣRz', sumRz.toFixed(4), 'kN']);
     data.push(['ΣMy', sumMy.toFixed(4), 'kN·m']);
@@ -363,7 +368,7 @@ function createSectionsSheet(): XLSX.WorkSheet {
   return ws;
 }
 
-export function exportToExcel(options: ExcelExportOptions = {}): void {
+export async function exportToExcel(options: ExcelExportOptions = {}): Promise<void> {
   const {
     filename = 'analisis-estructural.xlsx',
     includeResults = true,
@@ -385,5 +390,16 @@ export function exportToExcel(options: ExcelExportOptions = {}): void {
   XLSX.utils.book_append_sheet(wb, createMaterialsSheet(), t('excel.sheetMaterials'));
   XLSX.utils.book_append_sheet(wb, createSectionsSheet(), t('excel.sheetSections'));
 
+  if (isNativeDesktop()) {
+    try {
+      // XLSX.writeFile relies on browser downloads; use a native Save dialog in Tauri.
+      const base64 = XLSX.write(wb, { bookType: 'xlsx', type: 'base64', compression: true });
+      const savedPath = await nativeSaveExport(filename, 'xlsx', base64);
+      if (savedPath) uiStore.toast('Excel exported: ' + savedPath, 'success');
+    } catch (error) {
+      uiStore.toast('Excel export failed: ' + String(error), 'error');
+    }
+    return;
+  }
   XLSX.writeFile(wb, filename);
 }

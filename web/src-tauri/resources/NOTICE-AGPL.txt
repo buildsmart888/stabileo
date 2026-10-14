@@ -1,0 +1,25 @@
+GO Structural Analysis - Stabileo Desktop prototype v0.1.0
+
+This program is based on Stabileo, copyright its original contributors,
+https://github.com/lambdaclass/stabileo
+
+Copyright for the GO desktop additions belongs to their respective contributors.
+
+SOURCE & LICENSE:
+The combined desktop prototype is distributed under the GNU Affero General
+Public License, version 3 (AGPL-3.0). Its corresponding source is available at:
+https://github.com/buildsmart888/stabileo
+including the engine, web app, desktop integration, and build scripts.
+
+The full AGPL license text is in the repository root LICENSE file:
+https://github.com/buildsmart888/stabileo/blob/main/LICENSE
+When building from a feature branch, inspect the LICENSE file at that commit.
+
+Third-party dependencies have their own licenses; inspect
+THIRD_PARTY_NOTICES.md and Rust/Node dependency metadata in the source.
+
+This prototype is for testing and engineering verification. No claim of
+professional design certification, independent code compliance, or warranty
+is made. Inspect and validate every result before relying on it.
+
+No proprietary GO Professional source code is incorporated here.

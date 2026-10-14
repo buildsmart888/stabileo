@@ -9,7 +9,12 @@
     "preview": "vite preview",
     "wasm": "cd ../engine && wasm-pack build --target web --out-dir ../web/src/lib/wasm --no-opt",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "desktop:frontend": "npm run desktop:verify-solver && node scripts/build-desktop.mjs",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build",
+    "desktop:smoke": "node --test scripts/desktop-smoke.test.mjs",
+    "desktop:verify-solver": "node scripts/check-wasm.mjs && node scripts/verify-wasm-solvers.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
@@ -19,7 +24,8 @@
     "svelte": "^5.19.0",
     "typescript": "^5.7.3",
     "vite": "^6.1.0",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@tauri-apps/cli": "^2.0.0"
   },
   "dependencies": {
     "dxf-parser": "^1.1.2",

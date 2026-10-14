@@ -1,6 +1,7 @@
 <script lang="ts">
   import { uiStore, resultsStore, modelStore, historyStore } from '../lib/store';
   import { saveProject, loadFile, saveSession } from '../lib/store/file';
+  import { isDesktop, desktopOpen, desktopSave } from '../lib/desktop/bridge';
   import { resolveDeleteTargets } from '../lib/store/delete-selection';
   import type { ClipboardData } from '../lib/store/ui.svelte.ts';
   import { t } from '../lib/i18n';
@@ -370,14 +371,14 @@
     // Ctrl+S: Save project (current tab)
     if ((e.ctrlKey || e.metaKey) && key === 'S' && !e.shiftKey) {
       e.preventDefault();
-      saveProject();
+      if (isDesktop()) void desktopSave(false); else saveProject();
       return;
     }
 
     // Ctrl+O: Open/Load
     if ((e.ctrlKey || e.metaKey) && key === 'O') {
       e.preventDefault();
-      fileInput?.click();
+      if (isDesktop()) void desktopOpen(); else fileInput?.click();
       return;
     }
 
