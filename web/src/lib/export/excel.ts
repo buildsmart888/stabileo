@@ -369,6 +369,10 @@ function createSectionsSheet(): XLSX.WorkSheet {
 }
 
 export async function exportToExcel(options: ExcelExportOptions = {}): Promise<void> {
+  if (resultsStore.resultsOrigin3D === 'native-qa' && isMode3D(uiStore.analysisMode)) {
+    uiStore.toast('Excel engineering reports are blocked for unverified Native QA results.', 'error');
+    return;
+  }
   const {
     filename = 'analisis-estructural.xlsx',
     includeResults = true,
