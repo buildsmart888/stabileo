@@ -3,6 +3,7 @@
   import { nativeExecutionManager, type NativeExecutionStatus } from '../../lib/desktop/native-execution-manager';
   import { downloadExcel } from '../../lib/store/file';
   import CalcReportDialog from '../CalcReportDialog.svelte';
+  import NativeQaControls from './NativeQaControls.svelte';
   import { isDesktop, desktopOpen, desktopSave, desktopAutoSave, desktopListRecovery, desktopRecoverById, type RecoveryEntry, type RecoverySaveStatus } from '../../lib/desktop/bridge';
   let enabled = $state(false);
   let nativeStatus = $state<NativeExecutionStatus>({phase:'idle',requestId:0,message:'Native solver ready'});
@@ -82,6 +83,7 @@
     <button onclick={() => void openRecoveryPanel()}>Recovery</button>
     <button onclick={downloadExcel}>Excel</button>
     <button onclick={() => showPdfReport = true}>PDF Report</button>
+    <NativeQaControls />
     <span class="offline" role="status" aria-live="polite" title="QA native manager status; existing WASM production solve remains the default">
       Native QA: {nativeStatus.phase}{nativeStatus.elapsedMs != null ? ' · ' + nativeStatus.elapsedMs + ' ms' : ''}
     </span>
