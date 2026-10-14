@@ -5,6 +5,7 @@
   import { uiStore } from '../../lib/store';
   let showMetrics = $state(false);
   let exporting = $state(false);
+  let activeQaCalls = 0;
   let sample = $state<QaSample>({
     at: '', uiRafFps: null, p95UiFrameMs: null, longFramesOver50ms: 0,
     tauriCpuPercent: null, tauriResidentMiB: null
@@ -12,6 +13,21 @@
   type NativeInvoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
   type DesktopWindow = Window & { __TAURI__?: { core?: { invoke: NativeInvoke } } };
   const num = (v: number | null, unit: string) => v == null ? 'n/a' : v.toFixed(1) + unit;
+
+  async function startNativeQa(): Promise<void> {
+    activeQaCalls += 1;
+    desktopQaMonitor.start();
+    try { await runNativeQa3D(); }
+    finally {
+      activeQaCalls -= 1;
+      if (activeQaCalls === 0 && !showMetrics) desktopQaMonitor.stop();
+    }
+  }
+  function toggleMetrics(): void {
+    showMetrics = !showMetrics;
+    if (showMetrics) desktopQaMonitor.start();
+    else if (activeQaCalls === 0) desktopQaMonitor.stop();
+  }
 
   async function exportEvidence(): Promise<void> {
     if (exporting) return;
@@ -34,7 +50,7 @@
 
   onMount(() => {
     const unsubscribe = desktopQaMonitor.subscribe(s => { sample = s; });
-    desktopQaMonitor.start();
+    // Avoid a permanent animation loop when QA monitoring is not requested.
     return () => {
       unsubscribe();
       desktopQaMonitor.stop();
@@ -43,11 +59,11 @@
 </script>
 
 <div class="native-qa">
-  <button type="button" class="qa-solve" onclick={() => void runNativeQa3D()}
+  <button type="button" class="qa-solve" onclick={() => void startNativeQa()}
     title="Explicit QA action for the current 3D model; WASM remains the regular solver">
     Native QA Solve 3D
   </button>
-  <button type="button" onclick={() => showMetrics = !showMetrics}
+  <button type="button" onclick={toggleMetrics}
     aria-expanded={showMetrics} title="Performance telemetry and evidence export">
     QA Metrics
   </button>
