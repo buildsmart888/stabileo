@@ -21,6 +21,13 @@ Feature branch: feat/phase1e-desktop-native-qa
   cases, live calculation, shells/plates, extra constraints/connectors,
   member offsets and joint expansions. This is NOT parity for all PRO
   model features. Users must continue to use the standard solver there.
+- **Unverified output provenance:** Native QA results are labeled
+  `native-qa` and display a persistent UNVERIFIED warning. The desktop
+  PDF/Excel buttons, the PDF calculation dialog, CSV download and
+  direct Excel export reject this source; switching back to standard
+  WASM Solve replaces it with the normal `wasm` provenance.
+  Prior design verification and advanced results are cleared before
+  publishing QA data. A separate telemetry-only JSON export remains available.
 - Pure numerical sanity checks verify finite 3D displacements, reactions,
   member-end forces, valid node/member IDs, expected row counts and
   positive member lengths. These do not replace independent FEM validation.
@@ -70,6 +77,8 @@ Build a fresh real WASM binary; a stale WASM artifact invalidates parity.
 | Native returns missing member, NaN, null or Infinity | Result rejected before resultsStore update |
 | Orbit/zoom camera during native solve | No UI blocking from Tauri invoke, measure actual FPS separately |
 | Export QA JSON | File dialog, valid JSON; host CPU/RAM and UI rAF clearly identified |
+| After Native QA, attempt engineering PDF/Excel/CSV | Blocked with persistent UNVERIFIED label |
+| Run normal WASM Solve again | QA provenance replaced with standard solver provenance; exports become available |
 | Web app | Native buttons/telemetry absent; existing Web WASM path unchanged |
 
 Record OS, CPU model, RAM capacity, test model dimensions and load units.
