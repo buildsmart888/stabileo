@@ -69,6 +69,14 @@ jobs:
         working-directory: engine
         run: cargo nextest run --profile ci --test sparse_shell_gates
 
+      - name: Phase 1A native adapter parity
+        working-directory: engine
+        run: cargo test --test native_adapter_parity
+
+      - name: Check native CLI binary
+        working-directory: engine
+        run: cargo check --bin stabileo-native
+
       - name: Solver invariants gate
         working-directory: engine
         run: cargo nextest run --profile ci --test solver_invariants
