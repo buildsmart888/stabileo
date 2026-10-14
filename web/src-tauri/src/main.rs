@@ -459,6 +459,27 @@ async fn desktop_export_file(
     Ok(Some(path.to_string_lossy().into_owned()))
 }
 
+// Shared Rust FEM engine is used directly in-process, without a subprocess or WASM.
+const MAX_SOLVER_JSON_BYTES: usize = 32 * 1024 * 1024;
+
+fn native_linear_json(mode: &str, input_json: &str) -> Result<String, String> {
+    if input_json.len() > MAX_SOLVER_JSON_BYTES {
+        return Err("Structural model exceeds the 32 MiB native solve limit.".into());
+    }
+    match mode {
+        "2d" => dedaliano_engine::native_api::solve_linear_2d_json(input_json),
+        "3d" => dedaliano_engine::native_api::solve_linear_3d_json(input_json),
+        _ => Err("Unsupported native mode; use 2d or 3d.".into()),
+    }
+}
+
+#[tauri::command]
+async fn desktop_solve_linear(mode: String, input_json: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || native_linear_json(&mode, &input_json))
+        .await
+        .map_err(|error| format!("Native FEM task failed: {error}"))?
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(DesktopState::default())
@@ -472,6 +493,7 @@ fn main() {
             desktop_list_recovery,
             desktop_read_recovery,
             desktop_export_file,
+            desktop_solve_linear,
         ])
         .run(tauri::generate_context!())
         .expect("failed to start GO Stabileo Desktop");
@@ -480,6 +502,27 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_linear_command_accepts_reference_models() {
+        let two_d = include_str!("../../../engine/tests/fixtures/cantilever-input.json");
+        let three_d = include_str!("../../../engine/tests/fixtures/cantilever-3d-input.json");
+        for (dimension, input) in [("2d", two_d), ("3d", three_d)] {
+            let json = native_linear_json(dimension, input).expect("native solve failed");
+            let result: serde_json::Value = serde_json::from_str(&json).unwrap();
+            assert_eq!(result["displacements"].as_array().unwrap().len(), 2);
+            assert!(result["reactions"].is_array());
+            assert!(result["elementForces"].is_array());
+        }
+    }
+
+    #[test]
+    fn native_linear_command_rejects_invalid_modes_and_inputs() {
+        assert!(native_linear_json("nonlinear", "{}").unwrap_err().contains("Unsupported"));
+        assert!(native_linear_json("3d", "{broken").unwrap_err().contains("Parse error"));
+        assert!(native_linear_json("2d", &" ".repeat(MAX_SOLVER_JSON_BYTES + 1))
+            .unwrap_err().contains("32 MiB"));
+    }
 
     #[test]
     fn validates_projects_and_rejects_unknown_files() {
