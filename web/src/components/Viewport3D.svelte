@@ -19,7 +19,7 @@
   import { updateGrid as _updateGrid, createFatAxes as _createFatAxes, addAxisLabels as _addAxisLabels } from '../lib/viewport3d/grid';
   import { syncNodes as _syncNodes, syncElements as _syncElements, syncSupports as _syncSupports, syncLoads as _syncLoads, syncShells as _syncShells, syncSelection as _syncSelection, syncLocalAxes as _syncLocalAxes, syncMemberOffsets as _syncMemberOffsets, syncShellOffsets as _syncShellOffsets, applyElementVisibility, type SceneSyncContext } from '../lib/viewport3d/scene-sync';
   import { syncDeformed as _syncDeformed, syncDiagrams3D as _syncDiagrams3D, syncColorMap3D as _syncColorMap3D, syncVerificationLabels as _syncVerificationLabels, syncReactions as _syncReactions, syncConstraintForces as _syncConstraintForces, syncLabels3D as _syncLabels3D, syncDespiece3D as _syncDespiece3D, DIAGRAM_3D_TYPES, type ResultsSyncContext } from '../lib/viewport3d/results-sync';
-  import { applyLowDetail, isHeavyModel } from '../lib/viewport3d/lod';
+  import { applyLowDetail, shouldUseFastOrbitLOD, idlePixelRatio, type ViewQuality3D } from '../lib/viewport3d/lod';
 
   let container: HTMLDivElement;
   let renderer: THREE.WebGLRenderer;
@@ -30,6 +30,22 @@
   let controls: OrbitControls;
   let animFrameId: number;
   let initialized = false;
+  // This setting affects only rendering quality, not FEM inputs or results.
+  let qualityPreset = $state<ViewQuality3D>('auto');
+  let showPerformanceHud = $state(false);
+  let fastPreviewActive = $state(false);
+  let performanceStats = $state({ fps: 0, drawCalls: 0, triangles: 0, members: 0, renderMs: 0 });
+  let applyQualityPreset: () => void = () => {};
+  function changeQualityPreset(next: ViewQuality3D) {
+    qualityPreset = next;
+    try { localStorage.setItem('go-viewport3d-quality', next); } catch { /* private browsing */ }
+    applyQualityPreset();
+  }
+  function togglePerformanceHud() {
+    showPerformanceHud = !showPerformanceHud;
+    try { localStorage.setItem('go-viewport3d-performance-hud', showPerformanceHud ? '1' : '0'); } catch { /* private browsing */ }
+    invalidate();
+  }
 
   // ─── Invalidation-based rendering ───────────────────────────
   // Declared here so $effect blocks can call invalidate() from outside onMount.
@@ -84,6 +100,7 @@
   // to one raycast per frame instead of one per event.
   let pendingHoverEvent: MouseEvent | null = null;
   let hoverRafId: number | null = null;
+  let lastHoverRaycastAt = 0;
 
   // ─── Box select state ──────────────────────────────────────
   // Mode to return to when the quick sections toggle is switched off — keeps
@@ -201,6 +218,12 @@
   });
 
   onMount(() => {
+    // Restore visual preferences only. No project data is changed.
+    try {
+      const saved = localStorage.getItem('go-viewport3d-quality');
+      if (saved === 'auto' || saved === 'performance' || saved === 'detail') qualityPreset = saved;
+      showPerformanceHud = localStorage.getItem('go-viewport3d-performance-hud') === '1';
+    } catch { /* storage unavailable */ }
     // Scene
     scene = new THREE.Scene();
     scene.background = new THREE.Color(COLORS.background);
@@ -244,8 +267,10 @@
     camera = uiStore.cameraMode3D === 'orthographic' ? orthoCamera : perspCamera;
 
     // Renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer = new THREE.WebGLRenderer({
+      antialias: true, preserveDrawingBuffer: true, powerPreference: 'high-performance',
+    });
+    renderer.setPixelRatio(idlePixelRatio(window.devicePixelRatio, qualityPreset));
     renderer.localClippingEnabled = true;
     container.appendChild(renderer.domElement);
 
@@ -287,19 +312,23 @@
     window.addEventListener('keydown', onNavKeyDown);
     window.addEventListener('keyup', onNavKeyUp);
 
-    // Sync camera state to uiStore on orbit change (throttled)
+    // Avoid flooding reactive UI stores on every OrbitControls change.
     let cameraSyncTimer: ReturnType<typeof setTimeout> | null = null;
-    controls.addEventListener('change', () => {
-      invalidate(); // Re-render on orbit/pan/zoom via OrbitControls
-      if (cameraSyncTimer) return; // throttle
+    const syncCameraToStore = () => {
+      const pos = camera.position;
+      const tgt = controls.target;
+      uiStore.cameraPosition3D = { x: pos.x, y: pos.y, z: pos.z };
+      uiStore.cameraTarget3D = { x: tgt.x, y: tgt.y, z: tgt.z };
+    };
+    const onOrbitChange = () => {
+      invalidate();
+      if (cameraSyncTimer) return;
       cameraSyncTimer = setTimeout(() => {
         cameraSyncTimer = null;
-        const pos = camera.position;
-        const tgt = controls.target;
-        uiStore.cameraPosition3D = { x: pos.x, y: pos.y, z: pos.z };
-        uiStore.cameraTarget3D = { x: tgt.x, y: tgt.y, z: tgt.z };
-      }, 100);
-    });
+        syncCameraToStore();
+      }, 250);
+    };
+    controls.addEventListener('change', onOrbitChange);
 
     // Lighting
     const ambient = new THREE.AmbientLight(0xffffff, 0.6);
@@ -345,6 +374,9 @@
     // the scene is dirty (needsRender=true) or continuous rendering is required
     // (animations, keyboard navigation, or the user override flag).
     let needsRender = true;
+    let rafScheduled = false;
+    let measurementStart = performance.now();
+    let measurementFrames = 0;
     let dampingFrames = 0; // extra frames for OrbitControls damping to settle
 
     /** Check if any animation is currently active that requires continuous rendering */
@@ -364,12 +396,19 @@
       return uiStore.continuousRendering || keysPressed.size > 0 || isAnimating() || dampingFrames > 0;
     }
 
-    /** Mark the scene as needing a re-render. Schedules a frame if one isn't pending. */
+    /** Exactly one WebGL requestAnimationFrame may be outstanding at a time.
+     * OrbitControls.update() emits "change" inside renderOnce; the old code
+     * scheduled one frame in change and a SECOND in the render-loop tail,
+     * unnecessarily doubling heavy-model work during damping/orbit.
+     */
+    function scheduleFrame() {
+      if (rafScheduled) return;
+      rafScheduled = true;
+      animFrameId = requestAnimationFrame(renderOnce);
+    }
     function _invalidate() {
-      if (!needsRender) {
-        needsRender = true;
-        animFrameId = requestAnimationFrame(renderOnce);
-      }
+      needsRender = true;
+      scheduleFrame();
     }
     // Expose invalidate to the outer scope for use in $effect blocks
     invalidate = _invalidate;
@@ -424,6 +463,7 @@
     }
 
     function renderOnce() {
+      rafScheduled = false;
       if (!needsRender && !needsContinuous()) return;
       needsRender = false;
 
@@ -444,7 +484,14 @@
       const _animDeformed = resultsStore.animateDeformed && _dt === 'deformed' && resultsStore.results3D;
       const _animMode = _dt === 'modeShape' && resultsStore.modalResult3D;
       const _animBuckling = _dt === 'bucklingMode' && resultsStore.bucklingResult3D;
-      if (_animDeformed || _animMode || _animBuckling) {
+      // Keep the current result mesh visible, but defer expensive geometry
+      // reconstruction while the user is orbiting a large structure.
+      const freezeDynamicMeshes = isOrbiting && shouldUseFastOrbitLOD(
+        qualityPreset,
+        { elements: modelStore.elements.size, shells: modelStore.plates.size + modelStore.quads.size, loads: modelStore.loads.length },
+        uiStore.renderMode3D, _dt,
+      );
+      if ((_animDeformed || _animMode || _animBuckling) && !freezeDynamicMeshes) {
         if (_animMode || _animBuckling) {
           // Mode shapes always animate — syncDeformed handles the sin() internally
           syncDeformed();
@@ -457,7 +504,7 @@
             syncDeformed(animScale);
           }
         }
-      } else if (deformedGroup && resultsCtx.lastDeformedAnimScale !== null) {
+      } else if (!_animDeformed && !_animMode && !_animBuckling && deformedGroup && resultsCtx.lastDeformedAnimScale !== null) {
         // Animation was running but conditions no longer met (model cleared, example changed, etc.)
         // Clean up immediately to avoid ghost deformed shape lingering until reactive effect fires
         resultsParent.remove(deformedGroup);
@@ -481,69 +528,119 @@
         resultsCtx.lastDespieceSep = null;
       }
 
+      const renderBegin = performance.now();
       renderer.render(scene, camera);
+      const renderMs = performance.now() - renderBegin;
       drawAxisGizmo();
 
-      // Keep looping if continuous rendering is needed
-      if (needsContinuous() || needsRender) {
-        animFrameId = requestAnimationFrame(renderOnce);
+      if (showPerformanceHud) {
+        measurementFrames++;
+        const now = performance.now();
+        const elapsed = now - measurementStart;
+        if (elapsed >= 650) {
+          performanceStats = {
+            fps: Math.round(measurementFrames * 1000 / elapsed),
+            drawCalls: renderer.info.render.calls,
+            triangles: renderer.info.render.triangles,
+            members: modelStore.elements.size,
+            renderMs: Math.round(renderMs * 10) / 10,
+          };
+          measurementStart = now;
+          measurementFrames = 0;
+        }
+      } else {
+        measurementStart = performance.now();
+        measurementFrames = 0;
       }
+      if (dampingFrames === 0 && restoreOrbitQualityPending) {
+        // Restore expensive solid/sections only AFTER damping settles.
+        restoreOrbitQualityPending = false;
+        isOrbiting = false;
+        fastPreviewActive = false;
+        setRenderPixelRatio(idlePixelRatio(window.devicePixelRatio, qualityPreset));
+        setLowDetail(false);
+        needsRender = true;
+      }
+
+      // Camera events, dynamic results and user interactions share ONE frame queue.
+      if (needsContinuous() || needsRender) scheduleFrame();
     }
     // Kick off the first frame
-    animFrameId = requestAnimationFrame(renderOnce);
+    scheduleFrame();
 
-    // When OrbitControls interaction ends, allow damping frames to settle
-    // During camera manipulation, drop to pixelRatio=1 so the GPU pushes ~4× fewer
-    // pixels on retina displays. Restore on 'end' so the idle frame is crisp.
-    // Slight aliasing during drag is acceptable — users perceive smoothness more
-    // than pixel fidelity while rotating.
-    const idlePixelRatio = window.devicePixelRatio;
-    // Level-of-detail during orbit. Typical models keep full detail while the
-    // camera moves; heavy models (per the isHeavyModel policy in lod.ts, which
-    // weighs shells and the sections render mode) fall back to hiding the
-    // decorative parents + per-element solids and forcing the single batched
-    // LineSegments2 draw call on as the stand-in.
+    // Adaptive LOD: collapse per-member solids into one batched line mesh
+    // during orbit/pan/zoom. Preserve actual shell contour triangles.
+    let restoreOrbitQualityPending = false;
+    let orbitDragging = false;
+    function setRenderPixelRatio(ratio: number): void {
+      if (Math.abs(renderer.getPixelRatio() - ratio) > 0.02) renderer.setPixelRatio(ratio);
+    }
     function setLowDetail(on: boolean): void {
       const dt = resultsStore.diagramType;
-      // Despiece manages element visibility itself (the original members are hidden
-      // and the separated free-body overlay is drawn instead). The heavy-model LOD
-      // fallback would force the batched wireframe visible during camera motion,
-      // flashing the un-separated model over the free-body view — so skip LOD
-      // entirely while Despiece is active. applyElementVisibility stays the authority.
       if (dt === 'despiece') return;
       const resultsColoringActive = !!resultsStore.results3D
         && (dt === 'axialColor' || dt === 'colorMap' || dt === 'verification');
-      const heavyModel = isHeavyModel(
-        { elements: modelStore.elements.size, shells: modelStore.plates.size + modelStore.quads.size },
-        uiStore.renderMode3D,
-      );
+      const counts = {
+        elements: modelStore.elements.size,
+        shells: modelStore.plates.size + modelStore.quads.size,
+        loads: modelStore.loads.length,
+      };
+      const fast = shouldUseFastOrbitLOD(qualityPreset, counts, uiStore.renderMode3D, dt);
+      fastPreviewActive = on && fast;
       applyLowDetail(on, {
         nodesParent, supportsParent, loadsParent, resultsParent, shellsParent,
-        localAxesParent,
-        elementsParent,
+        localAxesParent, elementsParent,
         elementsBatchedMesh: elementsBatched.mesh,
         renderMode: uiStore.renderMode3D,
-      }, { resultsColoringActive, heavyModel });
+      }, {
+        heavyModel: fast,
+        resultsColoringActive,
+        batchedResultColors: true,
+        shellContourActive: dt === 'colorMap'
+          && (resultsStore.colorMapKind === 'shellVonMises' || resultsStore.colorMapKind === 'shellBending'),
+      });
+    }
+    function beginOrbitLOD() {
+      orbitDragging = true;
+      isOrbiting = true;
+      restoreOrbitQualityPending = false;
+      dampingFrames = 0;
+      setRenderPixelRatio(Math.min(renderer.getPixelRatio(), 1));
+      setLowDetail(true);
+      invalidate();
+    }
+    function endOrbitLOD() {
+      if (!orbitDragging) return;
+      orbitDragging = false;
+      restoreOrbitQualityPending = true;
+      dampingFrames = 18;
+      if (cameraSyncTimer) {
+        clearTimeout(cameraSyncTimer);
+        cameraSyncTimer = null;
+      }
+      syncCameraToStore();
+      invalidate();
     }
     exitOrbitLOD = () => {
+      orbitDragging = false;
+      restoreOrbitQualityPending = false;
+      dampingFrames = 0;
       isOrbiting = false;
-      renderer.setPixelRatio(idlePixelRatio);
+      fastPreviewActive = false;
+      setRenderPixelRatio(idlePixelRatio(window.devicePixelRatio, qualityPreset));
       setLowDetail(false);
       invalidate();
     };
-    controls.addEventListener('start', () => {
-      isOrbiting = true;
-      dampingFrames = 0;
-      renderer.setPixelRatio(1);
-      setLowDetail(true);
-    });
-    controls.addEventListener('end', () => {
-      isOrbiting = false;
-      dampingFrames = 20;
-      renderer.setPixelRatio(idlePixelRatio);
-      setLowDetail(false);
+    applyQualityPreset = () => {
+      if (orbitDragging || restoreOrbitQualityPending) setLowDetail(true);
+      else {
+        setRenderPixelRatio(idlePixelRatio(window.devicePixelRatio, qualityPreset));
+        setLowDetail(false);
+      }
       invalidate();
-    });
+    };
+    controls.addEventListener('start', beginOrbitLOD);
+    controls.addEventListener('end', endOrbitLOD);
 
     // Listen for global zoom-to-fit event (dispatched by F key from Toolbar)
     const handleZoomToFitEvent = () => { zoomToFit(); }; // zoomToFit() calls invalidate() internally
@@ -581,6 +678,12 @@
     return () => {
       initialized = false;
       cancelAnimationFrame(animFrameId);
+      if (cameraSyncTimer) clearTimeout(cameraSyncTimer);
+      if (hoverRafId !== null) cancelAnimationFrame(hoverRafId);
+      controls.removeEventListener('change', onOrbitChange);
+      controls.removeEventListener('start', beginOrbitLOD);
+      controls.removeEventListener('end', endOrbitLOD);
+      applyQualityPreset = () => {};
       ro.disconnect();
       renderer.dispose();
       controls.dispose();
@@ -1931,6 +2034,16 @@
       if (!ev || !camera || !initialized) return;
       // Re-check orbit in case it started between schedule and frame.
       if (isOrbiting) return;
+      // The hover query is useful but an expensive BVH raycast can saturate
+      // the main thread on large professional structures. Cap it at 20 Hz.
+      const now = performance.now();
+      const throttleHover = shouldUseFastOrbitLOD(
+        qualityPreset,
+        { elements: modelStore.elements.size, shells: modelStore.plates.size + modelStore.quads.size, loads: modelStore.loads.length },
+        uiStore.renderMode3D, resultsStore.diagramType,
+      );
+      if (throttleHover && now - lastHoverRaycastAt < 50) return;
+      lastHoverRaycastAt = now;
       runHoverRaycast(ev);
     });
   }
@@ -2334,6 +2447,33 @@
     </button>
   </div>
 
+  <!-- 3D visual quality and diagnostics: no solver changes. -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div class="performance-panel" role="group" aria-label="3D rendering quality"
+    onmousedown={(e) => e.stopPropagation()}
+    onmouseup={(e) => e.stopPropagation()}>
+    <label for="quality-preset-3d">3D Quality</label>
+    <select id="quality-preset-3d" value={qualityPreset}
+      onchange={(e) => changeQualityPreset(e.currentTarget.value as ViewQuality3D)}
+      title="Auto reduces detail while orbiting complex structural models">
+      <option value="auto">Auto</option>
+      <option value="performance">Fast</option>
+      <option value="detail">Detail</option>
+    </select>
+    <button onclick={togglePerformanceHud} aria-pressed={showPerformanceHud}
+      title="Show render frame rate and WebGL draw calls">FPS</button>
+    {#if fastPreviewActive}<span class="performance-preview">Fast orbit preview</span>{/if}
+    {#if showPerformanceHud}
+      <div class="performance-stats">
+        <span>FPS (motion): <b>{performanceStats.fps}</b></span>
+        <span>Draw calls: <b>{performanceStats.drawCalls}</b></span>
+        <span>Triangles: <b>{performanceStats.triangles.toLocaleString()}</b></span>
+        <span>Members: <b>{performanceStats.members.toLocaleString()}</b></span>
+        <span>Frame submit: <b>{performanceStats.renderMs.toFixed(1)} ms</b></span>
+      </div>
+    {/if}
+  </div>
+
   <!-- Clipping plane controls -->
   {#if uiStore.clippingEnabled}
     <div class="clip-controls" style="top: {uiStore.floatingToolsTopOffset}px; left: {uiStore.showFloatingTools ? 12 : 48}px">
@@ -2476,6 +2616,43 @@
 </div>
 
 <style>
+  .performance-panel {
+    position: absolute;
+    bottom: 12px;
+    right: 10px;
+    z-index: 15;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    max-width: min(390px, 70%);
+    padding: 6px 8px;
+    background: rgba(15, 32, 52, 0.92);
+    border: 1px solid #496477;
+    border-radius: 7px;
+    color: #cfe6f6;
+    font: 11px/1.4 system-ui, sans-serif;
+  }
+  .performance-panel select, .performance-panel button {
+    padding: 3px 6px;
+    background: #25485e;
+    border: 1px solid #567d95;
+    border-radius: 5px;
+    color: #f2fcff;
+    cursor: pointer;
+  }
+  .performance-preview { color: #83ebb4; }
+  .performance-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+    gap: 3px 8px;
+    flex-basis: 100%;
+    border-top: 1px solid #496477;
+    padding-top: 5px;
+  }
+  .performance-stats span { display: flex; justify-content: space-between; gap: 8px; }
+  .performance-stats b { font-variant-numeric: tabular-nums; color: #96d6f6; }
   .viewport3d-wrapper {
     width: 100%;
     height: 100%;

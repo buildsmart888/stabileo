@@ -107,4 +107,15 @@ describe('NodesInstanced', () => {
     expect(ni.has(1)).toBe(false);
     expect(ni.nodeIdAt(0)).toBeNull();
   });
+
+  it('skips identical positions without uploading a new instance matrix', () => {
+    const instances = new NodesInstanced();
+    instances.upsert(7, 1, 2, 3);
+    const previousVersion = instances.mesh.instanceMatrix.version;
+    instances.upsert(7, 1, 2, 3);
+    expect(instances.mesh.instanceMatrix.version).toBe(previousVersion);
+    instances.upsert(7, 1, 2, 4);
+    expect(instances.mesh.instanceMatrix.version).toBeGreaterThan(previousVersion);
+  });
+
 });

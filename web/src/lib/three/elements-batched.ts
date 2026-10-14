@@ -66,6 +66,7 @@ export class ElementsBatched {
     xJ: number, yJ: number, zJ: number,
   ): void {
     let idx = this.idToIndex.get(id);
+    const fresh = idx === undefined;
     if (idx === undefined) {
       if (this.count >= this.capacity) this.grow();
       idx = this.count;
@@ -78,6 +79,13 @@ export class ElementsBatched {
       }
     }
     const off = idx * 6;
+    // Opening another tab or changing a reactive UI option may cause syncElements
+    // to run without changing any endpoints. Skip the expensive GPU buffer
+    // rebuild entirely for unchanged geometry.
+    if (!fresh
+        && this.positions[off] === xI && this.positions[off + 1] === yI
+        && this.positions[off + 2] === zI && this.positions[off + 3] === xJ
+        && this.positions[off + 4] === yJ && this.positions[off + 5] === zJ) return;
     this.positions[off] = xI;
     this.positions[off + 1] = yI;
     this.positions[off + 2] = zI;
@@ -128,6 +136,13 @@ export class ElementsBatched {
   setColor(id: number, color: number): void {
     const idx = this.idToIndex.get(id);
     if (idx === undefined) return;
+    this._colorTmp.setHex(color);
+    const off = idx * 6;
+    // Stored as float32; tolerate rounding in THREE.Color's float64 channels.
+    const epsilon = 1e-6;
+    if (Math.abs(this.colors[off] - this._colorTmp.r) < epsilon
+      && Math.abs(this.colors[off + 1] - this._colorTmp.g) < epsilon
+      && Math.abs(this.colors[off + 2] - this._colorTmp.b) < epsilon) return;
     this.writeColor(idx, color);
     this.colorDirty = true;
   }

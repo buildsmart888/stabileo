@@ -48,6 +48,7 @@ export class ElementsPicking {
 
   private idToIndex = new Map<number, number>();
   private indexToId: number[] = [];
+  private endpointsById = new Map<number, [number, number, number, number, number, number]>();
 
   private _mat4 = new THREE.Matrix4();
   private _pos = new THREE.Vector3();
@@ -72,6 +73,10 @@ export class ElementsPicking {
   }
 
   upsert(id: number, pI: Point3, pJ: Point3): void {
+    const old = this.endpointsById.get(id);
+    if (old && old[0] === pI.x && old[1] === pI.y && old[2] === pI.z
+      && old[3] === pJ.x && old[4] === pJ.y && old[5] === pJ.z) return;
+    this.endpointsById.set(id, [pI.x, pI.y, pI.z, pJ.x, pJ.y, pJ.z]);
     let idx = this.idToIndex.get(id);
     if (idx === undefined) {
       if (this.count >= this.capacity) this.grow();
@@ -99,6 +104,7 @@ export class ElementsPicking {
     }
     this.indexToId.length = lastIdx;
     this.idToIndex.delete(id);
+    this.endpointsById.delete(id);
     this.count = lastIdx;
     this.mesh.count = this.count;
     this.mesh.instanceMatrix.needsUpdate = true;
@@ -120,6 +126,7 @@ export class ElementsPicking {
   }
 
   clear(): void {
+    this.endpointsById.clear();
     this.idToIndex.clear();
     this.indexToId.length = 0;
     this.count = 0;
