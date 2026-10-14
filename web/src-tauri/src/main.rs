@@ -504,6 +504,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn native_linear_command_accepts_reference_models() {
+        let two_d = include_str!("../../../engine/tests/fixtures/cantilever-input.json");
+        let three_d = include_str!("../../../engine/tests/fixtures/cantilever-3d-input.json");
+        for (dimension, input) in [("2d", two_d), ("3d", three_d)] {
+            let json = native_linear_json(dimension, input).expect("native solve failed");
+            let result: serde_json::Value = serde_json::from_str(&json).unwrap();
+            assert_eq!(result["displacements"].as_array().unwrap().len(), 2);
+            assert!(result["reactions"].is_array());
+            assert!(result["elementForces"].is_array());
+        }
+    }
+
+    #[test]
+    fn native_linear_command_rejects_invalid_modes_and_inputs() {
+        assert!(native_linear_json("nonlinear", "{}").unwrap_err().contains("Unsupported"));
+        assert!(native_linear_json("3d", "{broken").unwrap_err().contains("Parse error"));
+        assert!(native_linear_json("2d", &" ".repeat(MAX_SOLVER_JSON_BYTES + 1))
+            .unwrap_err().contains("32 MiB"));
+    }
+
+    #[test]
     fn validates_projects_and_rejects_unknown_files() {
         assert!(validate_project(r#"{"version":"2.0","snapshot":{}}"#).is_ok());
         assert!(validate_project(r#"{"type":"session","tabs":[]}"#).is_ok());
