@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { nativeExecutionManager, type NativeExecutionStatus } from '../../lib/desktop/native-execution-manager';
   import { downloadExcel } from '../../lib/store/file';
   import CalcReportDialog from '../CalcReportDialog.svelte';
   import { isDesktop, desktopOpen, desktopSave, desktopAutoSave, desktopListRecovery, desktopRecoverById, type RecoveryEntry, type RecoverySaveStatus } from '../../lib/desktop/bridge';
   let enabled = $state(false);
+  let nativeStatus = $state<NativeExecutionStatus>({phase:'idle',requestId:0,message:'Native solver ready'});
   let autosaveText = $state('Recovery: awaiting first snapshot');
   let autosaveError = $state(false);
   let showPdfReport = $state(false);
@@ -32,6 +34,7 @@
   onMount(() => {
     enabled = isDesktop();
     if (!enabled) return;
+    const unsubscribeNative = nativeExecutionManager.subscribe(s => { nativeStatus = s; });
     const autoSave = setInterval(() => { void desktopAutoSave(); }, 30000);
     const flushOnBlur = () => { void desktopAutoSave(); };
     const onVisibility = () => { if (document.visibilityState === 'hidden') void desktopAutoSave(); };
@@ -60,6 +63,7 @@
     };
     window.addEventListener('keydown', keydown, true);
     return () => {
+      unsubscribeNative();
       clearInterval(autoSave);
       window.removeEventListener('keydown', keydown, true);
       window.removeEventListener('go-desktop-autosave-status', onSaveStatus);
@@ -78,7 +82,12 @@
     <button onclick={() => void openRecoveryPanel()}>Recovery</button>
     <button onclick={downloadExcel}>Excel</button>
     <button onclick={() => showPdfReport = true}>PDF Report</button>
-    <span class="offline">Local solver · Offline capable</span>
+    <span class="offline" role="status" aria-live="polite" title="QA native manager status; existing WASM production solve remains the default">
+      Native QA: {nativeStatus.phase}{nativeStatus.elapsedMs != null ? ' · ' + nativeStatus.elapsedMs + ' ms' : ''}
+    </span>
+    {#if nativeStatus.phase === 'queued' || nativeStatus.phase === 'solving'}
+      <button type="button" onclick={() => nativeExecutionManager.cancel()} title="Discard native result. Does not terminate running FEM thread.">Discard Native Result</button>
+    {/if}
     <span class="autosave-indicator" class:error={autosaveError} title="Local recovery is stored in your Windows app data directory">{autosaveText}</span>
   </nav>
   <CalcReportDialog bind:open={showPdfReport} />

@@ -2,6 +2,7 @@
 import type { SolverInput, AnalysisResults } from '../engine/types';
 import type { SolverInput3D, AnalysisResults3D } from '../engine/types-3d';
 import { serializeInput3D } from '../engine/wasm-solver';
+import { nativeExecutionManager } from './native-execution-manager';
 
 type NativeInvoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 type DesktopWindow = Window & { __TAURI__?: { core?: { invoke: NativeInvoke } } };
@@ -37,4 +38,25 @@ export async function nativeSolve3D(input: SolverInput3D): Promise<AnalysisResul
   const invoke = (window as DesktopWindow).__TAURI__!.core!.invoke;
   const json = await invoke<string>('desktop_solve_linear', { mode: '3d', inputJson: serializeInput3D(input) });
   return JSON.parse(json) as AnalysisResults3D;
+}
+
+/** Opt-in safe 3D native execution. Supply an immutable revision fingerprint of
+ * the input and a callback giving the currently active model fingerprint.
+ * Callers MUST update the revision on any model edit or tab change.
+ */
+export function queuedNativeSolve3D(
+  input: SolverInput3D,
+  revision: string,
+  currentRevision: () => string
+): Promise<AnalysisResults3D> {
+  return nativeExecutionManager.submit(revision, currentRevision, () => nativeSolve3D(input));
+}
+
+/** Equivalent guarded linear 2D path; does not silently fall back to WASM. */
+export function queuedNativeSolve2D(
+  input: SolverInput,
+  revision: string,
+  currentRevision: () => string
+): Promise<AnalysisResults> {
+  return nativeExecutionManager.submit(revision, currentRevision, () => nativeSolve2D(input));
 }
