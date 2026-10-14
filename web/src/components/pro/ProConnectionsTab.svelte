@@ -21,7 +21,8 @@
   const jointForces = $derived.by((): JointForces | null => {
     if (!selectedJoint) return null;
     const r3d = resultsStore.results3D;
-    if (!r3d?.elementForces) return null;
+    // Unverified Native QA end forces must not populate connection design.
+    if (resultsStore.resultsOrigin3D === 'native-qa' || !r3d?.elementForces) return null;
     return getJointForces(
       selectedJoint.nodeId,
       selectedJoint.elementIds,
