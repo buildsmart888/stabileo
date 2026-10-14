@@ -141,6 +141,8 @@ function createResultsStore() {
 
   // 3D analysis results
   let results3D = $state<AnalysisResults3D | null>(null);
+  // Protect engineering reports from unverified experimental native results.
+  let resultsOrigin3D = $state<'wasm' | 'native-qa' | null>(null);
   let singleResults3D = $state<AnalysisResults3D | null>(null);
   let perCase3D = $state<Map<number, AnalysisResults3D>>(new Map());
   let perCombo3D = $state<Map<number, AnalysisResults3D>>(new Map());
@@ -571,6 +573,7 @@ function createResultsStore() {
       // When results disappear, Viewport effects cascade: no results → selectMode='elements' → stressQuery=null.
       // This allows the panel to survive live-calc re-solves where results are only briefly null.
       results3D = null;
+      resultsOrigin3D = null;
       singleResults3D = null;
       perCase3D = new Map();
       perCombo3D = new Map();
@@ -588,9 +591,11 @@ function createResultsStore() {
     // ─── 3D Results ─────────────────────────────────────────────
 
     get results3D() { return results3D; },
+    get resultsOrigin3D() { return resultsOrigin3D; },
 
-    setResults3D(r: AnalysisResults3D, preserveDiagram = false) {
+    setResults3D(r: AnalysisResults3D, preserveDiagram = false, origin: 'wasm' | 'native-qa' = 'wasm') {
       results3D = r;
+      resultsOrigin3D = origin;
       singleResults3D = r;
       showReactions = false;
       showConstraintForces = false;
@@ -624,6 +629,7 @@ function createResultsStore() {
 
     clear3D() {
       results3D = null;
+      resultsOrigin3D = null;
       singleResults3D = null;
       perCase3D = new Map();
       perCombo3D = new Map();
