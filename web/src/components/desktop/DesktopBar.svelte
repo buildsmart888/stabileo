@@ -3,6 +3,8 @@
   import { nativeExecutionManager, type NativeExecutionStatus } from '../../lib/desktop/native-execution-manager';
   import { downloadExcel } from '../../lib/store/file';
   import CalcReportDialog from '../CalcReportDialog.svelte';
+  import NativeQaControls from './NativeQaControls.svelte';
+  import { resultsStore } from '../../lib/store';
   import { isDesktop, desktopOpen, desktopSave, desktopAutoSave, desktopListRecovery, desktopRecoverById, type RecoveryEntry, type RecoverySaveStatus } from '../../lib/desktop/bridge';
   let enabled = $state(false);
   let nativeStatus = $state<NativeExecutionStatus>({phase:'idle',requestId:0,message:'Native solver ready'});
@@ -80,8 +82,16 @@
     <button onclick={() => void desktopSave(false)}>Save Ctrl+S</button>
     <button onclick={() => void desktopSave(true)}>Save As</button>
     <button onclick={() => void openRecoveryPanel()}>Recovery</button>
-    <button onclick={downloadExcel}>Excel</button>
-    <button onclick={() => showPdfReport = true}>PDF Report</button>
+    <button onclick={downloadExcel} disabled={resultsStore.resultsOrigin3D === 'native-qa'}
+      title="Engineering reports are disabled for unverified Native QA results">Excel</button>
+    <button onclick={() => showPdfReport = true} disabled={resultsStore.resultsOrigin3D === 'native-qa'}
+      title="Engineering reports are disabled for unverified Native QA results">PDF Report</button>
+    {#if resultsStore.resultsOrigin3D === 'native-qa'}
+      <strong class="qa-unverified" role="status">
+        UNVERIFIED Native QA results — engineering reports disabled
+      </strong>
+    {/if}
+    <NativeQaControls />
     <span class="offline" role="status" aria-live="polite" title="QA native manager status; existing WASM production solve remains the default">
       Native QA: {nativeStatus.phase}{nativeStatus.elapsedMs != null ? ' · ' + nativeStatus.elapsedMs + ' ms' : ''}
     </span>
@@ -128,7 +138,8 @@
 {/if}
 <style>
 .go-desktop{display:flex;align-items:center;gap:9px;flex-wrap:wrap;position:relative;z-index:9999;background:#112438;color:#e7f3fc;padding:8px 14px;font:12px/1.4 system-ui;border-bottom:1px solid #47748e}
-.go-desktop strong{font-size:14px;letter-spacing:.2px}.go-version{color:#7ad9b6;font-size:10px;font-weight:500}.source{opacity:.7;margin-right:auto}
+.go-desktop strong{font-size:14px;letter-spacing:.2px}
+.go-desktop .qa-unverified{font-size:11px;color:#ffdb9d;padding:5px 9px;border:1px solid #b68747;border-radius:5px}.go-version{color:#7ad9b6;font-size:10px;font-weight:500}.source{opacity:.7;margin-right:auto}
 .go-desktop button{background:#214965;border:1px solid #5082a2;border-radius:6px;padding:7px 11px;color:#fff;cursor:pointer}
 .go-desktop button:hover{background:#317499}.offline{color:#8be5bb}
   .autosave-indicator{font-size:11px;color:#a8d9ee;white-space:nowrap}.autosave-indicator.error{color:#ff9a9a;font-weight:600}

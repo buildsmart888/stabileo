@@ -43,6 +43,10 @@
   }
 
   function generateReport() {
+    if (resultsStore.resultsOrigin3D === 'native-qa' && is3D) {
+      uiStore.toast('Engineering reports are blocked for unverified Native QA results. Re-run standard WASM Solve.', 'error');
+      return;
+    }
     if (!hasResults) return;
     const config: CalcReportConfig = {
       projectName,

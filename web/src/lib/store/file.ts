@@ -305,6 +305,10 @@ export async function loadFile(file: File): Promise<{ type: 'tab' | 'session'; c
 
 export function exportResultsCSV(): string {
   const is3D = isMode3D(uiStore.analysisMode);
+  if (is3D && resultsStore.resultsOrigin3D === 'native-qa') {
+    uiStore.toast('CSV export blocked: Native QA results are not certified.', 'error');
+    return '';
+  }
   const r3d = resultsStore.results3D;
   const r2d = resultsStore.results;
 
@@ -534,6 +538,10 @@ export function downloadSVG(): void {
 
 /** Load the large spreadsheet library only after the user requests Excel export. */
 export async function downloadExcel(): Promise<void> {
+  if (resultsStore.resultsOrigin3D === 'native-qa' && isMode3D(uiStore.analysisMode)) {
+    uiStore.toast('Excel export blocked: Native QA results are not certified.', 'error');
+    return;
+  }
   try {
     const safeName = modelStore.model.name.replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ _-]/g, '').trim() || t('file.defaultAnalysis');
     const { exportToExcel } = await import('../export/excel');
@@ -811,6 +819,10 @@ export function generateReportHTML(): string {
 }
 
 export function openPDFReport(): void {
+  if (isMode3D(uiStore.analysisMode) && resultsStore.resultsOrigin3D === 'native-qa') {
+    uiStore.toast('PDF export blocked: Native QA results are not certified.', 'error');
+    return;
+  }
   const html = generateReportHTML();
   const w = window.open('', '_blank');
   if (!w) return;

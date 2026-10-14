@@ -96,7 +96,7 @@
   export function examples(btnEl: HTMLButtonElement) { exampleButtonEl = btnEl; toggleExampleMenu(); }
   export function isSolving() { return solving; }
   export function canSolve() { return hasModel && !solving; }
-  export function canReport() { return modelStore.nodes.size > 0; }
+  export function canReport() { return modelStore.nodes.size > 0 && resultsStore.resultsOrigin3D !== 'native-qa'; }
 
   type ExampleGroup = 'buildings' | 'industrial' | 'foundations' | 'longspan' | 'energy' | 'xl';
   type ExamplePreset = 'default' | 'xl' | 'clean-shell' | 'bridge';
@@ -420,6 +420,7 @@
   /** Compute station-based demands for all elements (when per-combo data available) */
   /** Auto-run CIRSOC verification on current results via unified service. */
   function autoVerify(): ElementVerification[] {
+    if (resultsStore.resultsOrigin3D === 'native-qa') return [];
     const results = resultsStore.results3D;
     if (!results) return [];
     const stationData = resultsStore.hasCombinations3D
@@ -450,6 +451,10 @@
   }
 
   async function handleOpenReportDialog() {
+    if (resultsStore.resultsOrigin3D === 'native-qa') {
+      uiStore.toast('PRO report blocked: Native QA results are unverified. Run standard WASM Solve.', 'error');
+      return;
+    }
     // Auto-solve if no results yet
     if (!resultsStore.results3D) {
       if (modelStore.nodes.size === 0) { uiStore.toast(t('pro.solveFirst'), 'error'); return; }
@@ -470,6 +475,10 @@
 
   function exportReport(config: ReportConfig) {
     showReportDialog = false;
+    if (resultsStore.resultsOrigin3D === 'native-qa') {
+      uiStore.toast('PRO report blocked: Native QA results are unverified.', 'error');
+      return;
+    }
 
     const results = resultsStore.results3D;
     if (!results) return;

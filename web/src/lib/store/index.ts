@@ -7,11 +7,14 @@ import { tabManager } from './tabs.svelte';
 import { tourStore } from './tour.svelte';
 import { verificationStore } from './verification.svelte';
 import { shouldProjectModelToXZ } from '../geometry/coordinate-system';
+import { nativeExecutionManager } from '../desktop/native-execution-manager';
 
 // Wire model mutations to automatically clear stale results.
 // This ensures results never persist after the model changes,
 // regardless of whether liveCalc is ON or OFF.
 modelStore._setOnMutation(() => {
+  // Do not let an in-flight opt-in Native QA result survive a model edit.
+  nativeExecutionManager.cancel();
   if (resultsStore.results || resultsStore.results3D) {
     resultsStore.clear();
     verificationStore.clear();

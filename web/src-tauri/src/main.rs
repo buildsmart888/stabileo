@@ -424,6 +424,14 @@ fn decode_export(format: &str, content: &str) -> Result<(&'static str, Vec<u8>),
             }
             Ok(("html", content.as_bytes().to_vec()))
         }
+        "json" => {
+            let value: serde_json::Value = serde_json::from_str(content)
+                .map_err(|error| format!("Invalid JSON evidence: {error}"))?;
+            if !value.is_object() && !value.is_array() {
+                return Err("JSON evidence must contain an object or array.".into());
+            }
+            Ok(("json", content.as_bytes().to_vec()))
+        }
         _ => Err("Unsupported export format.".into()),
     }
 }
@@ -438,7 +446,7 @@ async fn desktop_export_file(
     let safe_name = safe_export_name(&filename, extension);
     let chosen = tauri::async_runtime::spawn_blocking(move || {
         rfd::FileDialog::new()
-            .add_filter(if extension == "xlsx" { "Excel workbook" } else { "HTML calculation report" }, &[extension])
+            .add_filter(match extension { "xlsx" => "Excel workbook", "json" => "QA evidence JSON", _ => "HTML calculation report" }, &[extension])
             .set_file_name(&safe_name)
             .save_file()
     })
@@ -460,6 +468,42 @@ async fn desktop_export_file(
 }
 
 // Shared Rust FEM engine is used directly in-process, without a subprocess or WASM.
+// These numbers describe the Tauri host PROCESS only, not WebView2's
+// separate renderer/GPU processes. Process CPU may exceed 100% on multicore.
+struct ProcessMetricsState(Mutex<(sysinfo::System, bool)>);
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopProcessMetrics {
+    pid: u32,
+    cpu_percent: Option<f32>,
+    resident_bytes: u64,
+    warmed_up: bool,
+}
+
+#[tauri::command]
+fn desktop_process_metrics(state: State<'_, ProcessMetricsState>) -> Result<DesktopProcessMetrics, String> {
+    let pid = sysinfo::get_current_pid().map_err(|error| error.to_string())?;
+    let mut guard = state.0.lock().map_err(|error| error.to_string())?;
+    let (system, has_baseline) = &mut *guard;
+    system.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::Some(&[pid]),
+        true,
+        sysinfo::ProcessRefreshKind::nothing().with_cpu().with_memory(),
+    );
+    let process = system.process(pid).ok_or("Unable to sample Tauri process")?;
+    let warmed_up = *has_baseline;
+    let cpu_percent = if warmed_up { Some(process.cpu_usage()) } else { None };
+    let resident_bytes = process.memory();
+    *has_baseline = true;
+    Ok(DesktopProcessMetrics {
+        pid: pid.as_u32(),
+        cpu_percent,
+        resident_bytes,
+        warmed_up,
+    })
+}
+
 const MAX_SOLVER_JSON_BYTES: usize = 32 * 1024 * 1024;
 
 fn native_linear_json(mode: &str, input_json: &str) -> Result<String, String> {
@@ -483,6 +527,7 @@ async fn desktop_solve_linear(mode: String, input_json: String) -> Result<String
 fn main() {
     tauri::Builder::default()
         .manage(DesktopState::default())
+        .manage(ProcessMetricsState(Mutex::new((sysinfo::System::new(), false))))
         .invoke_handler(tauri::generate_handler![
             desktop_pick_project,
             desktop_commit_open,
@@ -494,6 +539,7 @@ fn main() {
             desktop_read_recovery,
             desktop_export_file,
             desktop_solve_linear,
+            desktop_process_metrics,
         ])
         .run(tauri::generate_context!())
         .expect("failed to start GO Stabileo Desktop");
@@ -637,6 +683,11 @@ mod tests {
         assert!(decode_export("pdf", "not-pdf").is_err());
         assert!(decode_export("html", "<!DOCTYPE html><html></html>").is_ok());
         assert!(decode_export("html", "<script>bad</script>").is_err());
+        let (kind, bytes) = decode_export("json", r#"{"suite":[{"fps":60}]}"#).unwrap();
+        assert_eq!(kind, "json");
+        assert!(bytes.starts_with(b"{"));
+        assert!(decode_export("json", "{broken").is_err());
+        assert!(decode_export("json", "\"string\"").is_err());
     }
 
     #[test]

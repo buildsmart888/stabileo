@@ -71,6 +71,9 @@ jobs:
       - name: Desktop smoke/reference fixture checks
         working-directory: web
         run: npm run desktop:smoke
+      - name: Phase 1E native QA state, numerical sanity and evidence tests
+        working-directory: web
+        run: npm run desktop:native-qa
       - name: Build standalone offline web assets
         working-directory: web
         run: npm run desktop:frontend
