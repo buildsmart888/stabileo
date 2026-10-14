@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyLowDetail, isHeavyModel, HEAVY_MODEL_VISUALS, HEAVY_MODEL_VISUALS_SECTIONS, type LowDetailGroups } from '../lod';
+import { applyLowDetail, isHeavyModel, shouldUseFastOrbitLOD, idlePixelRatio, weightedVisualCount, HEAVY_MODEL_VISUALS, HEAVY_MODEL_VISUALS_SECTIONS, type LowDetailGroups } from '../lod';
 
 function mkGroups(renderMode: 'wireframe' | 'solid' | 'sections' = 'wireframe'): LowDetailGroups {
   return {
@@ -125,5 +125,71 @@ describe('applyLowDetail — always-on invariants', () => {
     };
     expect(() => applyLowDetail(true, g, { heavyModel: true })).not.toThrow();
     expect(() => applyLowDetail(false, g)).not.toThrow();
+  });
+});
+
+describe('Professional large model interaction performance policy', () => {
+  it('detects the actual 7-floor Professional example before 3000 members', () => {
+    const sevenFloors = { elements: 203, shells: 77, loads: 196 };
+    expect(weightedVisualCount(sevenFloors)).toBe(455);
+    expect(isHeavyModel(sevenFloors, 'solid')).toBe(true);
+    expect(isHeavyModel(sevenFloors, 'sections')).toBe(true);
+    expect(isHeavyModel(sevenFloors, 'wireframe')).toBe(false);
+  });
+
+  it('detects dense RC frames and massive stadium/tower examples', () => {
+    expect(isHeavyModel({ elements: 408, loads: 656 }, 'solid')).toBe(true);
+    expect(isHeavyModel({ elements: 2476, shells: 120, loads: 514 }, 'wireframe')).toBe(true);
+    expect(isHeavyModel({ elements: 3434 }, 'wireframe')).toBe(true);
+    expect(isHeavyModel({ elements: 105, loads: 195 }, 'solid')).toBe(false);
+  });
+
+  it('respects Fast/Auto/Detail but NEVER substitutes the unsplit Despiece result', () => {
+    const small = { elements: 1 };
+    const large = { elements: 203, shells: 77, loads: 196 };
+    expect(shouldUseFastOrbitLOD('auto', large, 'solid')).toBe(true);
+    expect(shouldUseFastOrbitLOD('auto', small, 'solid')).toBe(false);
+    expect(shouldUseFastOrbitLOD('performance', small, 'solid')).toBe(true);
+    expect(shouldUseFastOrbitLOD('detail', large, 'sections')).toBe(false);
+    expect(shouldUseFastOrbitLOD('performance', large, 'solid', 'despiece')).toBe(false);
+  });
+
+  it('temporarily shows the per-element result colors on batch without hiding shell contours', () => {
+    const g = mkGroups('sections');
+    applyLowDetail(true, g, {
+      heavyModel: true, resultsColoringActive: true,
+      batchedResultColors: true, shellContourActive: true,
+    });
+    expect(g.elementsParent!.visible).toBe(false);
+    expect(g.shellsParent!.visible).toBe(true);
+    expect(g.elementsBatchedMesh!.visible).toBe(true);
+    expect(g.resultsParent!.visible).toBe(true);
+
+    applyLowDetail(false, g, {
+      heavyModel: true, resultsColoringActive: true,
+      batchedResultColors: true, shellContourActive: true,
+    });
+    expect(g.elementsParent!.visible).toBe(true);
+    expect(g.shellsParent!.visible).toBe(true);
+    expect(g.elementsBatchedMesh!.visible).toBe(false);
+  });
+
+  it('hides redundant shell geometry while showing existing batched verification colors', () => {
+    const g = mkGroups('solid');
+    applyLowDetail(true, g, {
+      heavyModel: true, resultsColoringActive: true,
+      batchedResultColors: true, shellContourActive: false,
+    });
+    expect(g.elementsParent!.visible).toBe(false);
+    expect(g.shellsParent!.visible).toBe(false);
+    expect(g.elementsBatchedMesh!.visible).toBe(true);
+  });
+
+  it('caps idle Retina pixel density by visual quality preference', () => {
+    expect(idlePixelRatio(2.5, 'auto')).toBe(1.5);
+    expect(idlePixelRatio(2.5, 'performance')).toBe(1.25);
+    expect(idlePixelRatio(2.5, 'detail')).toBe(2);
+    expect(idlePixelRatio(1, 'auto')).toBe(1);
+    expect(idlePixelRatio(Number.NaN, 'auto')).toBe(1);
   });
 });

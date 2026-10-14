@@ -77,4 +77,17 @@ describe('ElementsPicking', () => {
     const geom = ep.mesh.geometry as THREE.BufferGeometry & { boundsTree?: unknown };
     expect(geom.boundsTree).toBeDefined();
   });
+
+  it('does not update the GPU picking buffer for unchanged endpoints', () => {
+    const picking = new ElementsPicking();
+    const pI = { x: 0, y: 0, z: 0 };
+    const pJ = { x: 4, y: 2, z: 1 };
+    picking.upsert(25, pI, pJ);
+    const previousVersion = picking.mesh.instanceMatrix.version;
+    picking.upsert(25, { ...pI }, { ...pJ });
+    expect(picking.mesh.instanceMatrix.version).toBe(previousVersion);
+    picking.upsert(25, pI, { x: 5, y: 2, z: 1 });
+    expect(picking.mesh.instanceMatrix.version).toBeGreaterThan(previousVersion);
+  });
+
 });

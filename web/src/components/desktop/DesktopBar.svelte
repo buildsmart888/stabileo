@@ -2,8 +2,10 @@
   import { onMount } from 'svelte';
   import { downloadExcel } from '../../lib/store/file';
   import CalcReportDialog from '../CalcReportDialog.svelte';
-  import { isDesktop, desktopOpen, desktopSave, desktopAutoSave, desktopListRecovery, desktopRecoverById, type RecoveryEntry } from '../../lib/desktop/bridge';
+  import { isDesktop, desktopOpen, desktopSave, desktopAutoSave, desktopListRecovery, desktopRecoverById, type RecoveryEntry, type RecoverySaveStatus } from '../../lib/desktop/bridge';
   let enabled = $state(false);
+  let autosaveText = $state('Recovery: awaiting first snapshot');
+  let autosaveError = $state(false);
   let showPdfReport = $state(false);
   let showRecovery = $state(false);
   let loadingRecovery = $state(false);
@@ -31,6 +33,22 @@
     enabled = isDesktop();
     if (!enabled) return;
     const autoSave = setInterval(() => { void desktopAutoSave(); }, 30000);
+    const flushOnBlur = () => { void desktopAutoSave(); };
+    const onVisibility = () => { if (document.visibilityState === 'hidden') void desktopAutoSave(); };
+    const onSaveStatus = (event: Event) => {
+      const detail = (event as CustomEvent<RecoverySaveStatus>).detail;
+      if (!detail) return;
+      autosaveError = detail.status === 'error';
+      const at = new Date(detail.at).toLocaleTimeString();
+      autosaveText = autosaveError
+        ? 'Recovery error — check disk/storage'
+        : detail.status === 'saved'
+          ? 'Recovery saved ' + at
+          : 'Recovery verified ' + at;
+    };
+    window.addEventListener('go-desktop-autosave-status', onSaveStatus);
+    window.addEventListener('blur', flushOnBlur);
+    document.addEventListener('visibilitychange', onVisibility);
     const keydown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(tag)) return;
@@ -41,12 +59,18 @@
       }
     };
     window.addEventListener('keydown', keydown, true);
-    return () => { clearInterval(autoSave); window.removeEventListener('keydown', keydown, true); };
+    return () => {
+      clearInterval(autoSave);
+      window.removeEventListener('keydown', keydown, true);
+      window.removeEventListener('go-desktop-autosave-status', onSaveStatus);
+      window.removeEventListener('blur', flushOnBlur);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   });
 </script>
 {#if enabled}
   <nav class="go-desktop" aria-label="Desktop file commands">
-    <strong>GO Structural Analysis <span class="go-version">v0.1.1 QA</span></strong>
+    <strong>GO Structural Analysis <span class="go-version">v0.2.0 QA</span></strong>
     <span class="source">Stabileo / AGPL-3.0</span>
     <button onclick={() => void desktopOpen()}>Open Ctrl+O</button>
     <button onclick={() => void desktopSave(false)}>Save Ctrl+S</button>
@@ -55,6 +79,7 @@
     <button onclick={downloadExcel}>Excel</button>
     <button onclick={() => showPdfReport = true}>PDF Report</button>
     <span class="offline">Local solver · Offline capable</span>
+    <span class="autosave-indicator" class:error={autosaveError} title="Local recovery is stored in your Windows app data directory">{autosaveText}</span>
   </nav>
   <CalcReportDialog bind:open={showPdfReport} />
   {#if showRecovery}
@@ -64,7 +89,7 @@
           <h3>Recovery snapshots</h3>
           <button onclick={() => showRecovery = false} aria-label="Close recovery">Close</button>
         </div>
-        <p>Snapshots are saved for the active tab about every 30 seconds in local app data. Restoring replaces the current tab. Save your current work first.</p>
+        <p>Snapshots are saved for the active tab about every 30 seconds and when the window loses focus. Up to four older changed versions are kept per tab; unchanged models do not create duplicates. Restoring replaces the current tab. Save your current work first.</p>
         {#if loadingRecovery}
           <p>Checking recovery files...</p>
         {:else if recoveryError}
@@ -77,7 +102,7 @@
               <div class="recovery-item">
                 <div class="recovery-meta">
                   <strong>{item.modelName}</strong>
-                  <small>{displayTime(item.modifiedAtMs)} · {Math.round(item.bytes / 1024)} KB · {item.id}</small>
+                  <small>{displayTime(item.modifiedAtMs)} · {Math.round(item.bytes / 1024)} KB · {item.id.includes('--rev-') ? 'Older revision' : 'Latest revision'}</small>
                 </div>
                 <button onclick={() => void restoreRecovery(item.id)}>Restore</button>
               </div>
@@ -97,6 +122,7 @@
 .go-desktop strong{font-size:14px;letter-spacing:.2px}.go-version{color:#7ad9b6;font-size:10px;font-weight:500}.source{opacity:.7;margin-right:auto}
 .go-desktop button{background:#214965;border:1px solid #5082a2;border-radius:6px;padding:7px 11px;color:#fff;cursor:pointer}
 .go-desktop button:hover{background:#317499}.offline{color:#8be5bb}
+  .autosave-indicator{font-size:11px;color:#a8d9ee;white-space:nowrap}.autosave-indicator.error{color:#ff9a9a;font-weight:600}
   .recovery-overlay{position:fixed;inset:0;z-index:30001;background:#000b;display:flex;align-items:center;justify-content:center;padding:20px}
   .recovery-dialog{background:#152b42;color:#e4f2ff;border:1px solid #47748e;border-radius:10px;padding:20px;width:min(640px,100%);max-height:85vh;overflow:auto;box-shadow:0 15px 60px #0008}
   .recovery-heading{display:flex;align-items:center;justify-content:space-between;gap:15px}

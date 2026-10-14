@@ -69,6 +69,10 @@ Desktop **v0.1.1** (this branch) adds native Excel Save As, a print-targeted rep
 Reminder: `npm run desktop:smoke` checks Rust fixture reference values and XLSX serialization.
 `npm run desktop:verify-solver` executes actual WASM Rust 2D/3D analyses.
 
+## Verified 6/6 baseline and next version
+
+The completed v0.1.1 acceptance evidence and v0.1.2 QA procedure are documented in [WINDOWS_DESKTOP_QA.md](WINDOWS_DESKTOP_QA.md). Existing v0.1.1 binaries are not replaced by modifying the accepted source branch.
+
 ## Notes
 - Project Open/Save/Save As commands use Tauri-hosted native dialogs.
 - Periodic recovery snapshots live in the Tauri per-app local data directory.

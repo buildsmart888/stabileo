@@ -6,7 +6,6 @@ import { historyStore } from './history.svelte';
 import { uiStore } from './ui.svelte';
 import type { ModelSnapshot } from './history.svelte';
 import { NO_RELEASE, type Release } from './model.svelte';
-import { exportToExcel } from '../export/excel';
 import { tabManager } from './tabs.svelte';
 import type { TabState } from './tabs.svelte';
 import { t } from '../i18n';
@@ -533,9 +532,16 @@ export function downloadSVG(): void {
 
 // ─── Export Excel ────────────────────────────────────────────────
 
-export function downloadExcel(): void {
-  const safeName = modelStore.model.name.replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ _-]/g, '').trim() || t('file.defaultAnalysis');
-  exportToExcel({ filename: `${safeName}.xlsx` });
+/** Load the large spreadsheet library only after the user requests Excel export. */
+export async function downloadExcel(): Promise<void> {
+  try {
+    const safeName = modelStore.model.name.replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ _-]/g, '').trim() || t('file.defaultAnalysis');
+    const { exportToExcel } = await import('../export/excel');
+    await exportToExcel({ filename: `${safeName}.xlsx` });
+  } catch (error) {
+    console.error('Excel export failed:', error);
+    uiStore.toast('Excel export failed: ' + String(error), 'error');
+  }
 }
 
 // ─── PDF Report ─────────────────────────────────────────────────

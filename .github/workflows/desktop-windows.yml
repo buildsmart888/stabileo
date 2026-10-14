@@ -45,12 +45,29 @@ jobs:
         run: npm install --no-package-lock
       - name: Engine regression unit tests
         run: cargo +stable test --manifest-path engine/Cargo.toml --lib
+      - name: Phase 1C native typed and JSON tests
+        run: cargo +stable test --manifest-path engine/Cargo.toml --test native_adapter_parity
+      - name: Phase 1C build native CLI release
+        run: cargo +stable build --release -p dedaliano-engine --bin stabileo-native
+      - name: Phase 1C native CLI performance evidence
+        run: node scripts/benchmark-native-solver.cjs
+      - name: Upload Phase 1C native evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1c-native-performance
+          path: target/phase1c-native-perf.json
+          if-no-files-found: error
       - name: Build real Rust WASM engine (nightly build-std)
         working-directory: web
         run: npm run wasm
       - name: Execute Rust WASM 2D and 3D solver cases
         working-directory: web
         run: npm run desktop:verify-solver
+      - name: Phase 1C build Node-compatible WASM
+        working-directory: engine
+        run: wasm-pack build --target nodejs --out-dir ../target/wasm-parity --no-opt
+      - name: Phase 1C Native vs actual WASM numerical parity
+        run: node scripts/verify-native-wasm-parity.cjs
       - name: Desktop smoke/reference fixture checks
         working-directory: web
         run: npm run desktop:smoke

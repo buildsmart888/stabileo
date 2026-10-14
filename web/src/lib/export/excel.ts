@@ -65,13 +65,13 @@ function createSummarySheet(): XLSX.WorkSheet {
       maxMy = Math.max(maxMy, Math.abs(ef.myStart), Math.abs(ef.myEnd));
       maxMz = Math.max(maxMz, Math.abs(ef.mzStart), Math.abs(ef.mzEnd));
     }
-    data.push([t('excel.maxDisplacement'), (maxDisp * 1000).toFixed(4), 'mm']);
-    data.push([t('excel.maxN'), maxN.toFixed(2), 'kN']);
-    data.push([t('excel.maxVy'), maxVy.toFixed(2), 'kN']);
-    data.push([t('excel.maxVz'), maxVz.toFixed(2), 'kN']);
-    data.push([t('excel.maxMx'), maxMx.toFixed(2), 'kN·m']);
-    data.push([t('excel.maxMy'), maxMy.toFixed(2), 'kN·m']);
-    data.push([t('excel.maxMz'), maxMz.toFixed(2), 'kN·m']);
+    data.push([t('excel.maxDisplacement'), Number((maxDisp * 1000).toFixed(4)), 'mm']);
+    data.push([t('excel.maxN'), Number(maxN.toFixed(2)), 'kN']);
+    data.push([t('excel.maxVy'), Number(maxVy.toFixed(2)), 'kN']);
+    data.push([t('excel.maxVz'), Number(maxVz.toFixed(2)), 'kN']);
+    data.push([t('excel.maxMx'), Number(maxMx.toFixed(2)), 'kN·m']);
+    data.push([t('excel.maxMy'), Number(maxMy.toFixed(2)), 'kN·m']);
+    data.push([t('excel.maxMz'), Number(maxMz.toFixed(2)), 'kN·m']);
     data.push([]);
 
     let sumFx = 0, sumFy = 0, sumFz = 0, sumMx2 = 0, sumMy2 = 0, sumMz2 = 0;
@@ -82,23 +82,23 @@ function createSummarySheet(): XLSX.WorkSheet {
     // These figures are SUMS OF REACTIONS ONLY, not force/moment equilibrium residuals.
     // Distributed and point loads must also be included for a genuine equilibrium check.
     data.push(['Support reaction totals (not a full equilibrium check)']);
-    data.push(['ΣFx', sumFx.toFixed(4), 'kN']);
-    data.push(['ΣFy', sumFy.toFixed(4), 'kN']);
-    data.push(['ΣFz', sumFz.toFixed(4), 'kN']);
-    data.push(['ΣMx', sumMx2.toFixed(4), 'kN·m']);
-    data.push(['ΣMy', sumMy2.toFixed(4), 'kN·m']);
-    data.push(['ΣMz', sumMz2.toFixed(4), 'kN·m']);
+    data.push(['ΣFx', Number(sumFx.toFixed(4)), 'kN']);
+    data.push(['ΣFy', Number(sumFy.toFixed(4)), 'kN']);
+    data.push(['ΣFz', Number(sumFz.toFixed(4)), 'kN']);
+    data.push(['ΣMx', Number(sumMx2.toFixed(4)), 'kN·m']);
+    data.push(['ΣMy', Number(sumMy2.toFixed(4)), 'kN·m']);
+    data.push(['ΣMz', Number(sumMz2.toFixed(4)), 'kN·m']);
   } else if (r2d) {
     data.push([t('excel.maxResults')]);
-    data.push([t('excel.maxDisplacement'), (resultsStore.maxDisplacement * 1000).toFixed(4), 'mm']);
-    data.push([t('excel.maxMoment'), resultsStore.maxMoment.toFixed(2), 'kN·m']);
-    data.push([t('excel.maxShear'), resultsStore.maxShear.toFixed(2), 'kN']);
+    data.push([t('excel.maxDisplacement'), Number((resultsStore.maxDisplacement * 1000).toFixed(4)), 'mm']);
+    data.push([t('excel.maxMoment'), Number(resultsStore.maxMoment.toFixed(2)), 'kN·m']);
+    data.push([t('excel.maxShear'), Number(resultsStore.maxShear.toFixed(2)), 'kN']);
 
     let maxAxial = 0;
     for (const ef of r2d.elementForces) {
       maxAxial = Math.max(maxAxial, Math.abs(ef.nStart), Math.abs(ef.nEnd));
     }
-    data.push([t('excel.maxAxial'), maxAxial.toFixed(2), 'kN']);
+    data.push([t('excel.maxAxial'), Number(maxAxial.toFixed(2)), 'kN']);
     data.push([]);
 
     let sumRx = 0, sumRz = 0, sumMy = 0;
@@ -110,9 +110,9 @@ function createSummarySheet(): XLSX.WorkSheet {
     // These figures are SUMS OF REACTIONS ONLY, not force/moment equilibrium residuals.
     // Distributed and point loads must also be included for a genuine equilibrium check.
     data.push(['Support reaction totals (not a full equilibrium check)']);
-    data.push(['ΣRx', sumRx.toFixed(4), 'kN']);
-    data.push(['ΣRz', sumRz.toFixed(4), 'kN']);
-    data.push(['ΣMy', sumMy.toFixed(4), 'kN·m']);
+    data.push(['ΣRx', Number(sumRx.toFixed(4)), 'kN']);
+    data.push(['ΣRz', Number(sumRz.toFixed(4)), 'kN']);
+    data.push(['ΣMy', Number(sumMy.toFixed(4)), 'kN·m']);
   }
 
   const ws = XLSX.utils.aoa_to_sheet(data);

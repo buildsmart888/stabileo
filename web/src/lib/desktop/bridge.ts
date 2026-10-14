@@ -40,13 +40,32 @@ export async function desktopRecover(): Promise<void> {
     if (opened) await restoreContent(opened, false);
   } catch (error) { uiStore.toast('Recovery failed: ' + String(error), 'error'); }
 }
+/** Recovery saves report their status so silent disk failures cannot go unnoticed. */
+export interface RecoverySaveStatus {
+  status: 'saved' | 'unchanged' | 'error';
+  at: number;
+  message?: string;
+}
+function reportSaveStatus(detail: RecoverySaveStatus): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent<RecoverySaveStatus>('go-desktop-autosave-status', { detail }));
+  }
+}
+
 let inFlight = false;
 export async function desktopAutoSave(): Promise<void> {
   const invoke = native(); if (!invoke || inFlight) return;
   inFlight = true;
-  try { await invoke('desktop_autosave', { tabId: currentTabId(), content: serializeProject() }); }
-  catch (error) { console.error('Desktop recovery snapshot failed:', error); }
-  finally { inFlight = false; }
+  try {
+    const written = await invoke<boolean>('desktop_autosave', {
+      tabId: currentTabId(), content: serializeProject()
+    });
+    reportSaveStatus({ status: written ? 'saved' : 'unchanged', at: Date.now() });
+  } catch (error) {
+    const message = String(error);
+    console.error('Desktop recovery snapshot failed:', error);
+    reportSaveStatus({ status: 'error', at: Date.now(), message });
+  } finally { inFlight = false; }
 }
 
 
