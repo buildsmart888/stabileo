@@ -27,7 +27,9 @@ Feature branch: feat/phase1e-desktop-native-qa
   direct Excel export reject this source; switching back to standard
   WASM Solve replaces it with the normal `wasm` provenance.
   Prior design verification and advanced results are cleared before
-  publishing QA data. A separate telemetry-only JSON export remains available.
+  publishing QA data. PRO report generation, the active RC/steel Design tab
+  and connection-force auto-fill are likewise blocked from consuming QA data.
+  A separate telemetry-only JSON export remains available.
 - Pure numerical sanity checks verify finite 3D displacements, reactions,
   member-end forces, valid node/member IDs, expected row counts and
   positive member lengths. These do not replace independent FEM validation.
@@ -77,7 +79,8 @@ Build a fresh real WASM binary; a stale WASM artifact invalidates parity.
 | Native returns missing member, NaN, null or Infinity | Result rejected before resultsStore update |
 | Orbit/zoom camera during native solve | No UI blocking from Tauri invoke, measure actual FPS separately |
 | Export QA JSON | File dialog, valid JSON; host CPU/RAM and UI rAF clearly identified |
-| After Native QA, attempt engineering PDF/Excel/CSV | Blocked with persistent UNVERIFIED label |
+| After Native QA, attempt engineering PDF/Excel/CSV and PRO report | Blocked with persistent UNVERIFIED label |
+| Run RC/steel Design or connection auto-fill with QA result | Disabled/blocked until standard WASM solve |
 | Run normal WASM Solve again | QA provenance replaced with standard solver provenance; exports become available |
 | Web app | Native buttons/telemetry absent; existing Web WASM path unchanged |
 
