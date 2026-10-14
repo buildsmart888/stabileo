@@ -38,7 +38,9 @@ Feature branch: feat/phase1e-desktop-native-qa
   2. Tauri Rust host process CPU percentage and resident memory;
   3. Recent native end-to-end call times and disposition in exported JSON.
   The host CPU may exceed 100% when several cores are used. The native
-  memory metric excludes WebView2 renderer/GPU child processes.
+  memory metric excludes WebView2 renderer/GPU child processes. Telemetry
+  is opt-in: open QA Metrics or run Native QA to start sampling. It stops
+  when neither the panel nor a QA run needs it (no permanent idle rAF loop).
 - **Export QA Evidence (.json)** uses the user-selected file dialog,
   validates structured JSON on the Rust side and stores recent bounded
   samples (max 1800) and summaries of the latest 100 QA runs. It exports
