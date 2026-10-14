@@ -16,7 +16,7 @@
     "desktop:smoke": "node --test scripts/desktop-smoke.test.mjs && node scripts/desktop-performance-fixtures.mjs",
     "desktop:verify-solver": "node scripts/check-wasm.mjs && node scripts/verify-wasm-solvers.mjs",
     "desktop:performance-fixtures": "node scripts/desktop-performance-fixtures.mjs",
-    "desktop:native-qa": "vitest run src/lib/desktop/__tests__/native-execution-manager.test.ts src/lib/desktop/__tests__/native-qa-validation.test.ts src/lib/desktop/__tests__/qa-performance-monitor.test.ts",
+    "desktop:native-qa": "vitest run src/lib/desktop/__tests__/native-execution-manager.test.ts src/lib/desktop/__tests__/native-qa-validation.test.ts src/lib/desktop/__tests__/qa-performance-monitor.test.ts src/lib/desktop/__tests__/native-qa-provenance.test.ts",
     "desktop:perf-unit": "vitest run src/lib/viewport3d/__tests__/lod.test.ts src/lib/three/__tests__/elements-batched.test.ts src/lib/three/__tests__/elements-batched-grow.test.ts src/lib/three/__tests__/elements-picking.test.ts src/lib/three/__tests__/nodes-instanced.test.ts"
   },
   "devDependencies": {
