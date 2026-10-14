@@ -305,6 +305,10 @@ export async function loadFile(file: File): Promise<{ type: 'tab' | 'session'; c
 
 export function exportResultsCSV(): string {
   const is3D = isMode3D(uiStore.analysisMode);
+  if (is3D && resultsStore.resultsOrigin3D === 'native-qa') {
+    uiStore.toast('CSV export blocked: Native QA results are not certified.', 'error');
+    return '';
+  }
   const r3d = resultsStore.results3D;
   const r2d = resultsStore.results;
 
@@ -815,6 +819,10 @@ export function generateReportHTML(): string {
 }
 
 export function openPDFReport(): void {
+  if (isMode3D(uiStore.analysisMode) && resultsStore.resultsOrigin3D === 'native-qa') {
+    uiStore.toast('PDF export blocked: Native QA results are not certified.', 'error');
+    return;
+  }
   const html = generateReportHTML();
   const w = window.open('', '_blank');
   if (!w) return;
