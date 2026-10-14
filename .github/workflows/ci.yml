@@ -77,6 +77,19 @@ jobs:
         working-directory: engine
         run: cargo check --bin stabileo-native
 
+      - name: Build native and WASM parity artifacts
+        working-directory: engine
+        run: |
+          cargo build --bin stabileo-native
+          cargo install wasm-pack --locked
+
+      - name: Build Node.js-compatible WASM for numerical parity
+        working-directory: engine
+        run: wasm-pack build --target nodejs --out-dir ../target/wasm-parity --no-opt
+
+      - name: Execute native vs WASM differential and cantilever oracle tests
+        run: node scripts/verify-native-wasm-parity.cjs
+
       - name: Solver invariants gate
         working-directory: engine
         run: cargo nextest run --profile ci --test solver_invariants
